@@ -113,10 +113,11 @@ section > .hrow { margin-bottom: 8px; }
 .infobox li { margin-bottom: 3px; }
 .stn { width: 14px; height: 14px; background: #ffd400; border: 2px solid #12222e; transform: rotate(45deg); box-shadow: 0 0 0 1.5px #fff; }
 .mstrip { display: none; }
+.quick { display: none; }
 @media (max-width: 760px) {
   /* Phone layout: the map stays pinned at the top, the controls scroll underneath it. */
   html, body { height: 100%; overflow: hidden; }
-  .app { grid-template-columns: 1fr; grid-template-rows: 44dvh 1fr; height: 100dvh; }
+  .app { grid-template-columns: 1fr; grid-template-rows: 30dvh 1fr; height: 100dvh; }
   #map { grid-row: 1; min-height: 0; padding-top: env(safe-area-inset-top); }
   .rail { grid-row: 2; border-right: 0; border-top: 1px solid var(--line); overflow-y: auto; -webkit-overflow-scrolling: touch;
           padding: 14px 14px calc(28px + env(safe-area-inset-bottom)); gap: 18px; }
@@ -126,9 +127,27 @@ section > .hrow { margin-bottom: 8px; }
   .info { width: 30px; height: 30px; font-size: 14px; }
   .leaflet-bar a { width: 40px; height: 40px; line-height: 40px; }
   .leaflet-top { top: env(safe-area-inset-top); }
-  .mstrip { display: block; max-width: calc(100vw - 24px); margin: 0 0 10px 10px; padding: 8px 12px; border-radius: 10px; font: 600 13px/1.3 var(--font);
+  .mstrip { display: none; max-width: calc(100vw - 24px); margin: 0 0 10px 10px; padding: 8px 12px; border-radius: 10px; font: 600 13px/1.3 var(--font);
             background: var(--panel); color: var(--ink); border: 2px solid var(--muted); box-shadow: 0 1px 6px rgba(0,0,0,.35); }
   .mstrip:empty { display: none; }
+  .ttl, .desk-only { display: none; }
+  .quick { display: flex; flex-direction: column; gap: 10px; }
+  .qcard { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--panel); }
+  .qhead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+  .qlabel { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 650; }
+  .qval { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+  .qcard .seg button { min-height: 38px; font-size: 14px; padding: 4px 6px; }
+  .qpane { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .qpane[hidden] { display: none; }
+  .qpane .chips { max-height: 132px; overflow-y: auto; }
+  .qstep { display: grid; grid-template-columns: 56px 1fr 56px; gap: 8px; align-items: center; }
+  .qstep button { min-height: 48px; font-size: 26px; line-height: 1; border-radius: 10px; border: 1px solid var(--line); background: var(--chip, var(--bg)); color: var(--ink); touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+  .qstep input { text-align: center; font-size: 22px; font-weight: 700; min-height: 48px; }
+  .qrow { display: flex; gap: 8px; margin-top: 8px; }
+  .qrow button { flex: 1; min-height: 38px; font-size: 13px; }
+  #qverdict { margin: 0; }
+  #qverdict ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+  #map { grid-row: 1; }
   .mstrip.ok { border-color: var(--ok); } .mstrip.tight { border-color: var(--tight); } .mstrip.bad { border-color: var(--bad); }
   .leaflet-control-attribution { font-size: 9px; }
 }
@@ -137,7 +156,30 @@ section > .hrow { margin-bottom: 8px; }
 <body>
 <div class="app">
   <aside class="rail">
-    <div>
+    <div class="quick" id="quick">
+      <div class="qcard">
+        <div class="qhead"><span class="qlabel">Tide height</span><span class="qval" id="q-tide-val">… ft</span></div>
+        <div class="seg" id="q-tabs">
+          <button type="button" data-t="now" aria-pressed="true">Right now</button>
+          <button type="button" data-t="high" aria-pressed="false">Highest tides</button>
+          <button type="button" data-t="type" aria-pressed="false">Type it</button>
+        </div>
+        <div class="qpane" id="qp-now"><span id="q-now-note">Looking up the current tide…</span></div>
+        <div class="qpane" id="qp-high" hidden><div>Highest predicted tides, next 60 days. Tap one:</div><div class="chips" id="qhigh" style="margin-top:6px"></div></div>
+        <div class="qpane" id="qp-type" hidden><div class="hero-input"><input id="q-tide-in" type="number" step="0.1" inputmode="decimal" aria-label="Tide height in feet"><span>ft</span></div></div>
+      </div>
+      <div class="qcard">
+        <div class="qhead"><span class="qlabel">Extra water</span><span class="qval" id="q-extra-val">22 in</span></div>
+        <div class="qstep">
+          <button type="button" id="q-minus" aria-label="One inch less">−</button>
+          <input id="q-extra-in" type="number" step="1" min="0" inputmode="numeric" aria-label="Extra water in inches">
+          <button type="button" id="q-plus" aria-label="One inch more">+</button>
+        </div>
+        <div class="qrow"><button class="btn" id="q-none" type="button">None</button><button class="btn" id="q-city" type="button">City estimate: 22 in</button></div>
+      </div>
+      <div class="verdict" id="qverdict" aria-live="polite"></div>
+    </div>
+    <div class="ttl">
       <h1>Tide Flood Map</h1>
       <p class="sub">Newport Harbor. Enter a tide height and see which ground it covers.</p>
     </div>
@@ -146,12 +188,12 @@ section > .hrow { margin-bottom: 8px; }
       <h2>1. Your spot</h2>
       <div class="field">
         <label for="addr">Search an address, or click the map</label>
-        <div class="inline"><input id="addr" type="text" placeholder="e.g. a street address in Newport Beach"><button class="btn" id="find" type="button">Find</button></div>
+        <div class="inline"><input id="addr" type="text" placeholder="e.g. 64 Beacon Bay, Newport Beach, CA"><button class="btn" id="find" type="button">Find</button></div>
         <p class="hint" id="addr-msg"></p>
       </div>
     </section>
 
-    <section>
+    <section class="desk-only">
       <h2>2. Tide height</h2>
       <div class="field">
         <label for="tide">Forecast high tide, as reported in the news or tide table</label>
@@ -177,14 +219,14 @@ section > .hrow { margin-bottom: 8px; }
         <p class="hint" id="tmsg"></p>
       </div>
       <div class="field">
-        <label>Highest predicted tides, next 30 days</label>
+        <label>Highest predicted tides, next 60 days</label>
         <div class="chips" id="ttop"></div>
       </div>
       <p class="hint">Or the City's upcoming high tides:</p>
       <div class="chips" id="chips"></div>
     </section>
 
-    <section>
+    <section class="desk-only">
       <h2>3. Extra water</h2>
       <div class="field">
         <div class="hrow"><label>How much higher than forecast is the water running?</label><button class="info" type="button" data-info="extra" aria-expanded="false" aria-label="More about extra water">i</button></div>
@@ -327,16 +369,16 @@ section > .hrow { margin-bottom: 8px; }
   ];
 
   var $ = function (id) { return document.getElementById(id); };
-  /* The pin starts at a neutral spot in the harbor. A saved pin (this browser) or a link such as
-     ...index.html?lat=LAT&lng=LNG opens at that place instead, so no home address lives in the code. */
-  var DEFAULT_HOME = [33.6068, -117.8996], startZoom = 16;
+  /* The pin starts at 64 Beacon Bay. A link such as ...index.html?lat=LAT&lng=LNG, or a pin saved in
+     this browser, opens somewhere else instead. */
+  var DEFAULT_HOME = [33.61020749943019, -117.89731682863939], startZoom = 17, usingDefaultHome = true;
   var home = DEFAULT_HOME.slice();
   (function () {
     var q = new URLSearchParams(location.search), la = parseFloat(q.get('lat')), lo = parseFloat(q.get('lng'));
-    if (isFinite(la) && isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180) { home = [la, lo]; startZoom = 17; return; }
+    if (isFinite(la) && isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180) { home = [la, lo]; startZoom = 17; usingDefaultHome = false; return; }
     try {
       var sv = JSON.parse(localStorage.getItem('tfm_home') || 'null');
-      if (sv && isFinite(sv[0]) && isFinite(sv[1])) { home = [sv[0], sv[1]]; startZoom = 17; }
+      if (sv && isFinite(sv[0]) && isFinite(sv[1])) { home = [sv[0], sv[1]]; startZoom = 17; usingDefaultHome = false; }
     } catch (e) {}
   })();
   var mode = 'city';
@@ -908,6 +950,7 @@ section > .hrow { margin-bottom: 8px; }
   function setStrip(head, cls) { if (stripEl) { stripEl.className = 'mstrip ' + cls; stripEl.textContent = head; } }
   function updateResults() {
     var v = levels();
+    if (typeof syncQuick === 'function') syncQuick();
     $('r-water').textContent = ft1(v.water);
     if (groundFt == null) return;
     var gap = groundFt - v.water, gap2 = groundFt - v.worse;
@@ -1065,12 +1108,13 @@ section > .hrow { margin-bottom: 8px; }
   }
   function loadTop() {
     var top = $('ttop'); top.innerHTML = '';
-    var now = new Date(), end = new Date(now.getTime() + 30 * 86400e3);
+    var now = new Date(), end = new Date(now.getTime() + 60 * 86400e3);
     hilo(ymd(now), ymd(end)).then(function (j) {
       var h = highs(j).sort(function (a, b) { return parseFloat(b.v) - parseFloat(a.v); }).slice(0, 6);
       if (!h.length) { top.textContent = 'Not available for this station.'; return; }
       h.forEach(function (p) { top.appendChild(highChip(p, true)); });
-    }).catch(function () { top.textContent = 'Not available right now.'; });
+      var qh = $('qhigh'); if (qh) { qh.innerHTML = ''; h.forEach(function (p) { qh.appendChild(highChip(p, true)); }); }
+    }).catch(function () { top.textContent = 'Not available right now.'; var qh = $('qhigh'); if (qh) qh.textContent = 'Not available right now.'; });
   }
   function stationChanged() {
     var id = $('station').value;
@@ -1121,6 +1165,58 @@ section > .hrow { margin-bottom: 8px; }
   $('tdate').addEventListener('keydown', function (e) { if (e.key === 'Enter') lookupDay(); });
   $('station').addEventListener('change', stationChanged);
   $('tdate').value = ymd(new Date()).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+
+  /* ---- Phone controls: one tide box, one extra-water box, and the verdict ---- */
+  var isPhone = window.matchMedia('(max-width: 760px)').matches, qTab = 'now';
+  function syncQuick() {
+    var v = levels();
+    $('q-tide-val').textContent = v.tide.toFixed(1) + ' ft';
+    var inch = Math.round((v.water - v.tide) * 12);
+    $('q-extra-val').textContent = inch + ' in';
+    if (document.activeElement !== $('q-extra-in')) $('q-extra-in').value = inch;
+    if (document.activeElement !== $('q-tide-in')) $('q-tide-in').value = v.tide.toFixed(1);
+  }
+  function setQTab(t) {
+    qTab = t;
+    Array.prototype.forEach.call($('q-tabs').children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-t') === t ? 'true' : 'false'); });
+    $('qp-now').hidden = t !== 'now'; $('qp-high').hidden = t !== 'high'; $('qp-type').hidden = t !== 'type';
+    if (t === 'now') loadNow();
+  }
+  function setTideValue(x) { $('tide').value = x.toFixed(1); $('tide').dispatchEvent(new Event('input')); }
+  function loadNow() {
+    var n = Date.now(), f = function (t) { var d = new Date(t); return d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()); };
+    var q = new URLSearchParams({ product: 'predictions', application: 'tide_flood_map', station: $('station').value,
+      begin_date: f(n - 86400e3), end_date: f(n + 86400e3), datum: 'MLLW', time_zone: 'gmt', units: 'english', format: 'json' });
+    $('q-now-note').textContent = 'Looking up the current tide…';
+    fetch(CO + '?' + q).then(function (r) { return r.json(); }).then(function (j) {
+      var P = (j.predictions || []).map(function (p) { var a = p.t.split(/[- :]/); return [Date.UTC(+a[0], +a[1] - 1, +a[2], +a[3], +a[4]), parseFloat(p.v)]; });
+      var i = 0; while (i < P.length - 1 && P[i + 1][0] <= n) i++;
+      if (P.length < 2 || n < P[0][0] || n > P[P.length - 1][0]) throw new Error('no data');
+      var a = P[i], b = P[i + 1] || P[i], v = b[0] === a[0] ? a[1] : a[1] + (b[1] - a[1]) * (n - a[0]) / (b[0] - a[0]);
+      if (qTab !== 'now') return;
+      setTideValue(v);
+      $('q-now-note').textContent = 'Predicted tide at this moment' + (b[1] > a[1] ? ', rising' : b[1] < a[1] ? ', falling' : '') + '. Source: NOAA, Newport Bay Entrance.';
+    }).catch(function () { $('q-now-note').textContent = 'Could not get the current tide. Pick "Highest tides" or type a height.'; });
+  }
+  Array.prototype.forEach.call($('q-tabs').children, function (b) { b.addEventListener('click', function () { setQTab(b.getAttribute('data-t')); }); });
+  $('q-tide-in').addEventListener('input', function () { if (this.value !== '') { $('tide').value = this.value; $('tide').dispatchEvent(new Event('input')); } });
+  function stepExtra(d) {
+    var cur = Math.round((levels().water - levels().tide) * 12), v = Math.max(0, cur + d);
+    $('extra-in').value = v; setMode('custom');
+  }
+  [['q-minus', -1], ['q-plus', 1]].forEach(function (c) {
+    var b = $(c[0]), t1 = null, t2 = null;
+    function stop() { clearTimeout(t1); clearInterval(t2); }
+    b.addEventListener('pointerdown', function (e) { e.preventDefault(); stepExtra(c[1]); t1 = setTimeout(function () { t2 = setInterval(function () { stepExtra(c[1]); }, 90); }, 450); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { b.addEventListener(ev, stop); });
+  });
+  $('q-extra-in').addEventListener('input', function () { var v = parseFloat(this.value); if (!isNaN(v)) { $('extra-in').value = Math.max(0, v); setMode('custom'); } });
+  $('q-none').addEventListener('click', function () { setMode('none'); });
+  $('q-city').addEventListener('click', function () { setMode('city'); });
+  new MutationObserver(function () { $('qverdict').className = $('verdict').className; $('qverdict').innerHTML = $('verdict').innerHTML; })
+    .observe($('verdict'), { childList: true, characterData: true, subtree: true, attributes: true });
+  if (isPhone) { setTimeout(function () { setQTab('now'); }, 0); setInterval(function () { if (qTab === 'now') loadNow(); }, 300000); }
+  if (usingDefaultHome) $('addr').value = '64 Beacon Bay, Newport Beach, CA';
 
   /* ---- Extra water ---- */
   function setMode(m) {
