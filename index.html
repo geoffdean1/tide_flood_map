@@ -1,0 +1,1275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tide Flood Map">
+<meta name="theme-color" content="#12222e">
+<title>Tide Flood Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+/* Layout: control rail on the left, full-bleed satellite map on the right; stacks on narrow screens. */
+:root {
+  --bg: #f3f5f6;
+  --panel: #ffffff;
+  --ink: #12222e;
+  --muted: #5a6b77;
+  --line: #d5dde2;
+  --water: #0a6cff;
+  --surge: #f08a00;
+  --worse: #d62839;
+  --ok: #1d7a46;
+  --tight: #b36b00;
+  --bad: #c0281e;
+  --chip: #e8eef2;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d151b; --panel: #15212a; --ink: #e6eef3; --muted: #8fa2af; --line: #263641;
+    --water: #4d97ff; --surge: #ffa733; --worse: #ff6b7a; --ok: #4cc283; --tight: #f0b04a; --bad: #ff6b5e; --chip: #1e2e39;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font); }
+.app { display: grid; grid-template-columns: 380px 1fr; height: 100%; }
+.rail { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 18px 18px 28px; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+#map { height: 100%; min-height: 360px; }
+h1 { font-size: 19px; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--muted); margin: 2px 0 0; font-size: 13px; }
+h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin: 0 0 8px; font-weight: 650; }
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.field label { font-size: 12.5px; color: var(--muted); }
+input[type=number], input[type=text], input[type=date], select {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--ink); font: 15px var(--font);
+}
+input:focus-visible, button:focus-visible { outline: 2px solid var(--water); outline-offset: 1px; }
+.hero-input { display: flex; align-items: baseline; gap: 8px; }
+.hero-input input { font-size: 28px; font-weight: 650; padding: 6px 10px; width: 120px; font-variant-numeric: tabular-nums; }
+.hero-input span { font-size: 18px; color: var(--muted); }
+.hint { color: var(--muted); font-size: 12.5px; margin: 4px 0 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 999px; padding: 4px 10px; font: 12.5px var(--font); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--water); border-color: var(--water); color: #fff; }
+.chip small { color: inherit; opacity: .78; font-size: 11px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-right: 1px solid var(--line); background: var(--chip); color: var(--ink); padding: 8px 6px; font: 13px var(--font); cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--water); color: #fff; }
+.seg small { display: block; font-size: 11px; opacity: .8; }
+.inline { display: flex; gap: 8px; align-items: center; }
+.inline input { flex: 1; min-width: 0; }
+.unit { color: var(--muted); font-size: 14px; }
+.btn { padding: 8px 12px; border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 6px; font: 13px var(--font); cursor: pointer; }
+.btn:disabled { opacity: .5; cursor: default; }
+.peak { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--bg); }
+.peak b { display: block; font-size: 20px; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.peak span { color: var(--muted); font-size: 12.5px; }
+.readout { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.readout div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+.readout div:last-child { border-bottom: 0; }
+.readout span:first-child { color: var(--muted); }
+.readout b { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+.verdict { padding: 11px 12px; border-radius: 8px; border: 1px solid var(--line); font-size: 13.5px; }
+.verdict strong { display: block; font-size: 15px; margin-bottom: 2px; }
+.verdict.ok strong { color: var(--ok); } .verdict.tight strong { color: var(--tight); } .verdict.bad strong { color: var(--bad); }
+.verdict ul { margin: 8px 0 0; padding-left: 18px; }
+.verdict li { margin-bottom: 3px; }
+.legend { display: grid; gap: 6px; }
+.legend div { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.sw { width: 18px; height: 12px; border-radius: 2px; flex: none; }
+.note { color: var(--muted); font-size: 12.5px; }
+.note ul { margin: 6px 0 0; padding-left: 18px; }
+.note li { margin-bottom: 4px; }
+#status { font-size: 12px; color: var(--muted); }
+#alerts { display: grid; gap: 8px; }
+.verdict .eff { display: block; font-weight: 600; margin-top: 6px; }
+.verdict .when, .verdict .src { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.verdict details { margin-top: 8px; }
+.verdict summary { cursor: pointer; color: var(--water); font-size: 13px; }
+.verdict pre { white-space: pre-wrap; font: 12px/1.45 var(--mono); max-height: 240px; overflow: auto; margin: 8px 0 0; padding: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.verdict a { color: var(--water); }
+.leaflet-container { font-family: var(--font); }
+.seg.two { grid-template-columns: 1fr 1fr; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row2 label { display: block; margin-bottom: 4px; }
+#barr-list { display: grid; gap: 6px; margin-top: 8px; font-size: 13px; }
+#barr-list .inline { justify-content: space-between; }
+.hrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hrow h2, .hrow label { margin: 0; }
+section > .hrow { margin-bottom: 8px; }
+.info { flex: none; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--muted); background: transparent; color: var(--muted); font: 600 12px/1 var(--font); cursor: pointer; }
+.info:hover, .info[aria-expanded="true"] { background: var(--water); border-color: var(--water); color: #fff; }
+.infobox { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 10px 12px; font-size: 13px; line-height: 1.5; margin: 0 0 10px; }
+.infobox .t { display: block; font-size: 14px; margin-bottom: 4px; }
+.infobox p { margin: 0 0 6px; }
+.infobox p:last-child { margin-bottom: 0; }
+.infobox ul { margin: 4px 0 6px; padding-left: 18px; }
+.infobox li { margin-bottom: 3px; }
+.stn { width: 14px; height: 14px; background: #ffd400; border: 2px solid #12222e; transform: rotate(45deg); box-shadow: 0 0 0 1.5px #fff; }
+.mstrip { display: none; }
+@media (max-width: 760px) {
+  /* Phone layout: the map stays pinned at the top, the controls scroll underneath it. */
+  html, body { height: 100%; overflow: hidden; }
+  .app { grid-template-columns: 1fr; grid-template-rows: 44dvh 1fr; height: 100dvh; }
+  #map { grid-row: 1; min-height: 0; padding-top: env(safe-area-inset-top); }
+  .rail { grid-row: 2; border-right: 0; border-top: 1px solid var(--line); overflow-y: auto; -webkit-overflow-scrolling: touch;
+          padding: 14px 14px calc(28px + env(safe-area-inset-bottom)); gap: 18px; }
+  input[type=number], input[type=text], input[type=date], select { font-size: 16px; min-height: 44px; }
+  .btn, .seg button, .chip { min-height: 44px; }
+  .chip { padding-top: 10px; padding-bottom: 10px; }
+  .info { width: 30px; height: 30px; font-size: 14px; }
+  .leaflet-bar a { width: 40px; height: 40px; line-height: 40px; }
+  .leaflet-top { top: env(safe-area-inset-top); }
+  .mstrip { display: block; max-width: calc(100vw - 24px); margin: 0 0 10px 10px; padding: 8px 12px; border-radius: 10px; font: 600 13px/1.3 var(--font);
+            background: var(--panel); color: var(--ink); border: 2px solid var(--muted); box-shadow: 0 1px 6px rgba(0,0,0,.35); }
+  .mstrip:empty { display: none; }
+  .mstrip.ok { border-color: var(--ok); } .mstrip.tight { border-color: var(--tight); } .mstrip.bad { border-color: var(--bad); }
+  .leaflet-control-attribution { font-size: 9px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div>
+      <h1>Tide Flood Map</h1>
+      <p class="sub">Newport Harbor. Enter a tide height and see which ground it covers.</p>
+    </div>
+
+    <section>
+      <h2>1. Your spot</h2>
+      <div class="field">
+        <label for="addr">Search an address, or click the map</label>
+        <div class="inline"><input id="addr" type="text" placeholder="e.g. a street address in Newport Beach"><button class="btn" id="find" type="button">Find</button></div>
+        <p class="hint" id="addr-msg"></p>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. Tide height</h2>
+      <div class="field">
+        <label for="tide">Forecast high tide, as reported in the news or tide table</label>
+        <div class="hero-input"><input id="tide" type="number" step="0.1" value="6.7"><span>ft</span></div>
+        <p class="hint">Any height works. Or look one up:</p>
+      </div>
+      <div class="field">
+        <label for="station">Tide station</label>
+        <select id="station">
+          <option value="9410580" selected>Newport Bay Entrance (use for Newport Harbor)</option>
+          <option value="9410660">Los Angeles</option>
+          <option value="9410840">Santa Monica</option>
+          <option value="9410230">La Jolla</option>
+          <option value="9410170">San Diego</option>
+        </select>
+        <div class="inline" style="margin-top:6px"><button class="btn" id="fitst" type="button">Show station on map</button></div>
+        <p class="hint" id="stinfo"></p>
+      </div>
+      <div class="field">
+        <label for="tdate">Date</label>
+        <div class="inline"><input id="tdate" type="date"><button class="btn" id="tlook" type="button">Look up</button></div>
+        <div class="chips" id="tres" style="margin-top:6px"></div>
+        <p class="hint" id="tmsg"></p>
+      </div>
+      <div class="field">
+        <label>Highest predicted tides, next 30 days</label>
+        <div class="chips" id="ttop"></div>
+      </div>
+      <p class="hint">Or the City's upcoming high tides:</p>
+      <div class="chips" id="chips"></div>
+    </section>
+
+    <section>
+      <h2>3. Extra water</h2>
+      <div class="field">
+        <div class="hrow"><label>How much higher than forecast is the water running?</label><button class="info" type="button" data-info="extra" aria-expanded="false" aria-label="More about extra water">i</button></div>
+        <div class="seg" id="mode">
+          <button type="button" data-mode="none" aria-pressed="false">Not at all<small>0 in</small></button>
+          <button type="button" data-mode="city" aria-pressed="true">City's estimate<small>+22 in</small></button>
+          <button type="button" data-mode="custom" aria-pressed="false">My own<small>set below</small></button>
+        </div>
+        <p class="hint">The City reports water recently running about 22 inches above forecast.</p>
+      </div>
+      <div class="field">
+        <label for="extra-in">Your own amount</label>
+        <div class="inline"><input id="extra-in" type="number" step="1" min="0" value="22"><span class="unit">inches</span></div>
+      </div>
+      <div class="field">
+        <button class="btn" id="apply" type="button" disabled>Use the live 24 h average</button>
+        <p class="hint">Measured at NOAA Los Angeles over the last 24 hours. It fills in "My own".</p>
+      </div>
+      <div class="field">
+        <div class="hrow"><label for="whatif">Also test a worse case: water even higher by</label><button class="info" type="button" data-info="worse" aria-expanded="false" aria-label="More about the worse case">i</button></div>
+        <div class="inline"><input id="whatif" type="number" step="1" min="0" value="0"><span class="unit">inches</span></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="hrow"><h2>Result</h2><button class="info" type="button" data-info="levels" aria-expanded="false" aria-label="More about the result">i</button></div>
+      <div class="peak">
+        <b id="peak-time">Pick a date to see its peak time</b>
+        <span id="peak-sub">The highest water of the day comes around this time. Check again before then.</span>
+      </div>
+      <div class="readout" aria-live="polite">
+        <div><span>Water level used</span><b id="r-water">–</b></div>
+        <div><span>Ground at your spot</span><b id="r-ground">–</b></div>
+        <div><span>Water below ground by</span><b id="r-gap">–</b></div>
+        <div><span>In the worse case</span><b id="r-gap2">–</b></div>
+        <div><span>Water can reach your spot</span><b id="r-path">–</b></div>
+      </div>
+      <p class="hint">Ground height is shown in the same feet as the tide table, so you can compare it directly with the forecast. Your spot floods when the tide reaches that height.</p>
+      <div class="verdict" id="verdict" style="margin-top:10px">Reading ground height…</div>
+    </section>
+
+    <section>
+      <div class="hrow"><h2>Live conditions</h2><button class="info" type="button" data-info="live" aria-expanded="false" aria-label="More about live conditions">i</button></div>
+      <div class="readout" aria-live="polite">
+        <div><span>Water above prediction, now</span><b id="l-now">–</b></div>
+        <div><span>Average, last 24 h</span><b id="l-avg">–</b></div>
+        <div><span>Highest, last 24 h</span><b id="l-max">–</b></div>
+        <div><span>Pressure</span><b id="l-p">–</b></div>
+        <div><span>Wind now, blowing from</span><b id="l-w">–</b></div>
+        <div><span>Strongest wind, next 48 h</span><b id="l-fw">–</b></div>
+      </div>
+      <div id="alerts" style="margin-top:10px">Loading NWS alerts…</div>
+      <p class="note" style="margin:8px 0 0">Observed at NOAA Los Angeles (9410660), the nearest station with live water level. Direction is where the wind blows from. "Onshore" means from the ocean side, roughly south-southeast through west, which pushes waves toward the beaches. Inside the harbor, waves stay small.</p>
+    </section>
+
+    <section>
+      <div class="hrow"><h2>Map layers</h2><button class="info" type="button" data-info="colors" aria-expanded="false" aria-label="More about the map colors">i</button></div>
+      <div class="field">
+        <div class="hrow"><label>Which situation do you want to see?</label><button class="info" type="button" data-info="barriers" aria-expanded="false" aria-label="More about barriers">i</button></div>
+        <div class="seg two" id="barrier-mode">
+          <button type="button" data-b="hold" aria-pressed="true">Barriers hold<small>Water must reach the ground over the surface</small></button>
+          <button type="button" data-b="fail" aria-pressed="false">Barriers fail or are bypassed<small>All low ground can flood</small></button>
+        </div>
+      </div>
+      <div class="field">
+        <label>How much area to work out</label>
+        <div class="seg two" id="area-mode">
+          <button type="button" data-a="near" aria-pressed="true">Close-up<small>Around your spot. Sharpest</small></button>
+          <button type="button" data-a="wide" aria-pressed="false">Whole inner harbor<small>Slower. Without the back bay</small></button>
+        </div>
+        <p class="hint" id="area-msg">Close-up covers about 1 km around your spot and the harbor entrance.</p>
+      </div>
+      <p class="hint" id="lg-mode" style="margin:10px 0 6px"></p>
+      <div class="legend">
+        <div><span class="sw" style="background:var(--water)"></span><span id="lg-blue">Under water at the forecast tide</span></div>
+        <div><span class="sw" style="background:var(--surge)"></span><span id="lg-orange">Under water if the water runs higher than forecast (step 3)</span></div>
+        <div><span class="sw" style="background:var(--worse)"></span><span id="lg-red">Under water in the worse case (step 3)</span></div>
+        <div id="lg-none-row"><span class="sw" style="background:transparent;border:1px dashed var(--muted,#888)"></span><span id="lg-none">No color: the water does not reach it</span></div>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <div class="hrow"><label>Where the water starts</label><button class="info" type="button" data-info="sources" aria-expanded="false" aria-label="More about water sources">i</button></div>
+        <div class="inline">
+          <button class="btn" id="seed-add" type="button">Add a source on the map</button>
+          <button class="btn" id="seed-clear" type="button">Clear mine</button>
+        </div>
+        <p class="hint" id="seed-msg">The harbor entrance tide station is the starting point. If part of the harbor water isn't blue, press the button, then click that water.</p>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <div class="hrow"><label>Known walls and openings (optional)</label><button class="info" type="button" data-info="known" aria-expanded="false" aria-label="More about known walls and openings">i</button></div>
+        <div class="row2">
+          <div><label for="wall-ft">Wall height</label><div class="inline"><input id="wall-ft" type="number" step="0.1" value="7.6"><span class="unit">ft</span></div></div>
+          <div><label for="open-ft">Opening height</label><div class="inline"><input id="open-ft" type="number" step="0.1" value="6.8"><span class="unit">ft</span></div></div>
+        </div>
+        <div class="inline" style="margin-top:6px;flex-wrap:wrap">
+          <button class="btn" id="wall-add" type="button">Add a wall area</button>
+          <button class="btn" id="open-add" type="button">Add an opening</button>
+          <button class="btn" id="barr-clear" type="button">Clear all</button>
+        </div>
+        <div id="barr-list"></div>
+        <p class="hint" id="barr-msg">The elevation data can miss thin seawalls. Add what you know. Heights are in feet on the tide-table scale. Works only when "Barriers hold" is selected.</p>
+      </div>
+      <div class="field" style="margin-top:10px"><label for="op">Overlay opacity</label><input id="op" type="range" min="20" max="100" value="60"></div>
+      <div id="status">Loading flood layer…</div>
+    </section>
+
+    <section class="note">
+      <h2>Please read</h2>
+      <p style="margin:0 0 6px">This is a planning aid, not an official forecast. Check the street where you park.</p>
+      <ul>
+        <li>Ground heights come from a lidar model and can be off by a few inches. Treat anything within a foot as uncertain.</li>
+        <li>With "Barriers hold" selected, water spreads from the harbor only over ground lower than the water level, so walled-off low spots get no color. The map is built from cells about 1 to 2 meters wide, so a thin wall or a narrow gap can be missed either way. No color does not mean safe. Choose "Barriers fail or are bypassed" to see everything that is low.</li>
+        <li>Walls and openings you add under "Known walls and openings" are your assumptions, not measurements. A wall set too high can hide real flooding, so say so when you share a result.</li>
+        <li>Storm drains, tidal valves, pumps, sandbags and berms are not included. Drain backup can flood streets below the harbor level.</li>
+        <li>The 22-inch figure is the City's illustration. Actual water has run 18 to 22 inches or more above forecast.</li>
+      </ul>
+    </section>
+  </aside>
+  <div id="map" role="application" aria-label="Flood map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+<script>
+(function () {
+  // Tide tables and the news quote heights on the NOAA tide-table scale. The elevation data uses a different
+  // zero. At Newport Bay Entrance (NOAA 9410580) that zero sits 0.18 ft higher, applied silently below.
+  var SCALE_GAP = 0.18;
+  var FT = 0.3048;
+  var DEM = 'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage';
+  var EPQS = 'https://epqs.nationalmap.gov/v1/json';
+  var PRESETS = [
+    ['Oct 26', 'Monday, Oct. 26', 6.5, '9:15 a.m.'], ['Oct 27', 'Tuesday, Oct. 27', 6.7, '9:50 a.m.'],
+    ['Oct 28', 'Wednesday, Oct. 28', 6.6, '10:28 a.m.'],
+    ['Nov 23', 'Monday, Nov. 23', 6.7, '7:12 a.m.'], ['Nov 24', 'Tuesday, Nov. 24', 6.9, '7:50 a.m.'],
+    ['Nov 25', 'Wednesday, Nov. 25', 7.0, '8:32 a.m.'], ['Nov 26', 'Thursday, Nov. 26', 6.9, '9:18 a.m.'],
+    ['Nov 27', 'Friday, Nov. 27', 6.5, '10:08 a.m.'],
+    ['Dec 22', 'Tuesday, Dec. 22', 6.8, '6:52 a.m.'], ['Dec 23', 'Wednesday, Dec. 23', 7.1, '7:38 a.m.'],
+    ['Dec 24', 'Thursday, Dec. 24', 7.2, '8:26 a.m.'], ['Dec 25', 'Friday, Dec. 25', 7.0, '9:15 a.m.'],
+    ['Dec 26', 'Saturday, Dec. 26', 6.6, '10:05 a.m.']
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+  /* The pin starts at a neutral spot in the harbor. A saved pin (this browser) or a link such as
+     ...index.html?lat=LAT&lng=LNG opens at that place instead, so no home address lives in the code. */
+  var DEFAULT_HOME = [33.6068, -117.8996], startZoom = 16;
+  var home = DEFAULT_HOME.slice();
+  (function () {
+    var q = new URLSearchParams(location.search), la = parseFloat(q.get('lat')), lo = parseFloat(q.get('lng'));
+    if (isFinite(la) && isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180) { home = [la, lo]; startZoom = 17; return; }
+    try {
+      var sv = JSON.parse(localStorage.getItem('tfm_home') || 'null');
+      if (sv && isFinite(sv[0]) && isFinite(sv[1])) { home = [sv[0], sv[1]]; startZoom = 17; }
+    } catch (e) {}
+  })();
+  var mode = 'city';
+  var groundFt = null;            // ground height on the tide-table scale, ft
+  var anomalyAvgFt = null;
+
+  var map = L.map('map').setView(home, startZoom);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 19, attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics. Elevation: USGS 3DEP' }).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 19, opacity: 0.8 }).addTo(map);
+  var marker = L.circleMarker(home, { radius: 7, color: '#fff', weight: 2, fillColor: '#e0245e', fillOpacity: 1 }).addTo(map)
+    .bindTooltip('Your spot', { direction: 'top' });
+
+  var slots = { surge: { layer: null, token: 0 }, extra: { layer: null, token: 0 }, water: { layer: null, token: 0 } };
+
+  function ft1(v) { return (v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + ' ft'; }
+  function inch(v) { return Math.round(Math.abs(v) * 12) + ' in'; }
+  function signed(v) { return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2) + ' ft'; }
+
+  function levels() {
+    var tide = parseFloat($('tide').value) || 0;
+    var extraIn = mode === 'none' ? 0 : mode === 'city' ? 22 : (parseFloat($('extra-in').value) || 0);
+    var whatifIn = parseFloat($('whatif').value) || 0;
+    var water = tide + extraIn / 12;
+    return { tide: tide, water: water, worse: water + whatifIn / 12 };
+  }
+
+  /* ---- Flood overlay (server-side raster function on the USGS elevation service) ---- */
+  function rule(thMeters, rgb, variant) {
+    var remapArgs = { InputRanges: [-200, +thMeters.toFixed(3)], OutputValues: [1], AllowUnmatched: false };
+    if (variant === 0) remapArgs.Raster = '$$';
+    return JSON.stringify({
+      rasterFunction: 'Colormap',
+      rasterFunctionArguments: {
+        Colormap: [[1, rgb[0], rgb[1], rgb[2]]],
+        Raster: { rasterFunction: 'Remap', rasterFunctionArguments: remapArgs }
+      }
+    });
+  }
+  function loadOverlay(name, levelFt, rgb, variant) {
+    variant = variant || 0;
+    var slot = slots[name];
+    var token = ++slot.token;
+    var b = map.getBounds();
+    var sw = L.CRS.EPSG3857.project(b.getSouthWest());
+    var ne = L.CRS.EPSG3857.project(b.getNorthEast());
+    var s = map.getSize();
+    var k = Math.min(1, 2000 / Math.max(s.x, s.y));
+    var thFt = levelFt - SCALE_GAP;
+    var url = DEM + '?' + new URLSearchParams({
+      f: 'image', format: 'png', transparent: 'true', bboxSR: '3857', imageSR: '3857',
+      bbox: [sw.x, sw.y, ne.x, ne.y].join(','),
+      size: Math.round(s.x * k) + ',' + Math.round(s.y * k),
+      renderingRule: rule(thFt * FT, rgb, variant)
+    }).toString();
+    var img = new Image();
+    img.onload = function () {
+      if (token !== slot.token) return;
+      if (slot.layer) map.removeLayer(slot.layer);
+      slot.layer = L.imageOverlay(url, b, { opacity: $('op').value / 100, interactive: false }).addTo(map);
+      if (slots.water.layer) slots.water.layer.bringToFront();
+      $('status').textContent = 'Flood layer updated for this view.';
+    };
+    img.onerror = function () {
+      if (token !== slot.token) return;
+      if (variant < 1) { loadOverlay(name, levelFt, rgb, variant + 1); return; }
+      $('status').textContent = 'Flood layer failed to load. Check your connection, or try zooming in.';
+    };
+    img.src = url;
+  }
+  var timer = null;
+  function legacyRefresh() {
+    var v = levels();
+    $('status').textContent = 'Updating flood layer…';
+    loadOverlay('surge', v.worse, [214, 40, 57], 0);
+    loadOverlay('extra', v.water, [240, 138, 0], 0);
+    loadOverlay('water', v.tide, [10, 108, 255], 0);
+  }
+  function setStatus(t) { $('status').textContent = t; }
+  function clearLegacy() {
+    ['surge', 'extra', 'water'].forEach(function (k) { var s = slots[k]; s.token++; if (s.layer) { map.removeLayer(s.layer); s.layer = null; } });
+  }
+
+  /* ---- Connectivity model -------------------------------------------------------------------------
+     Pull one block of elevation values around the spot and the harbor entrance, then flood-fill from the
+     harbor: water spreads to a neighbouring cell only if that cell is at or below the water level. Cells
+     that are low but walled off are drawn gray. The fill runs in the browser, so changing the water level
+     updates at once with no new download. */
+  var MAXPX = 2000, MAXPX_WIDE = 3000;                                  // largest grid side, cells
+  var BLUE = 0xFFFF6C0A, ORANGE = 0xFF008AF0, RED = 0xFF3928D6, GRAY = 0xFF8C8C8C;   // ABGR, little-endian
+  var conn = { on: true, ok: false, loading: false, failed: false, rendered: false, token: 0, station: null,
+               grid: null, w: 0, h: 0, sw: null, ne: null, spanX: 0, spanY: 0, res: 1, dom: null,
+               rW: null, rS: null, q: null, canvas: null, ctx: null, layer: null, outline: null,
+               prevUrl: null, userSeeds: [], seedLayer: L.layerGroup().addTo(map), placing: false };
+
+  function ensureStation() {
+    if (conn.station) return Promise.resolve();
+    return fetch('https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/9410580.json')
+      .then(function (r) { return r.json(); }).then(function (j) {
+        var s = j.stations && j.stations[0];
+        if (s && s.lat != null) conn.station = [s.lat, s.lng];
+      }).catch(function () {});
+  }
+  var WIDE = { s: 33.594, n: 33.625, w: -117.924, e: -117.872 };      // inner Newport Harbor, from the entrance up to Pacific Coast Highway
+  function domainFor(c) {
+    if (conn.area === 'wide' && c[0] > WIDE.s && c[0] < WIDE.n && c[1] > WIDE.w && c[1] < WIDE.e) return WIDE;
+    var pts = [c];
+    if (conn.station && miles(c, conn.station) * 1.609 < 4.5) pts.push(conn.station);
+    var padKm = 0.8, minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
+    pts.forEach(function (p) { minLa = Math.min(minLa, p[0]); maxLa = Math.max(maxLa, p[0]); minLo = Math.min(minLo, p[1]); maxLo = Math.max(maxLo, p[1]); });
+    var latPad = padKm / 111.32, lonPad = padKm / (111.32 * Math.cos(c[0] * Math.PI / 180));
+    return { s: minLa - latPad, n: maxLa + latPad, w: minLo - lonPad, e: maxLo + lonPad };
+  }
+  function inDomain(ll) {
+    var d = conn.dom, m = 0.0015;
+    return !!d && ll[0] > d.s + m && ll[0] < d.n - m && ll[1] > d.w + m && ll[1] < d.e - m;
+  }
+
+  // Minimal reader for an uncompressed single-band Float32 TIFF, used only if geotiff.js did not load.
+  function parseTiff(buf) {
+    var dv = new DataView(buf), le = dv.getUint16(0) === 0x4949;
+    if (dv.getUint16(2, le) !== 42) throw new Error('not a classic TIFF');
+    var ifd = dv.getUint32(4, le), n = dv.getUint16(ifd, le), T = {};
+    var sz = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8 };
+    for (var i = 0; i < n; i++) {
+      var o = ifd + 2 + i * 12, tag = dv.getUint16(o, le), type = dv.getUint16(o + 2, le), cnt = dv.getUint32(o + 4, le);
+      var vo = (sz[type] || 1) * cnt <= 4 ? o + 8 : dv.getUint32(o + 8, le), vals = [];
+      if (type === 3 || type === 4) for (var k = 0; k < cnt; k++) vals.push(type === 3 ? dv.getUint16(vo + 2 * k, le) : dv.getUint32(vo + 4 * k, le));
+      T[tag] = vals;
+    }
+    var W = T[256][0], H = T[257][0], bits = (T[258] || [32])[0], comp = (T[259] || [1])[0];
+    var spp = (T[277] || [1])[0], fmt = (T[339] || [1])[0];
+    if (comp !== 1) throw new Error('compressed TIFF');
+    if (bits !== 32 || fmt !== 3 || spp !== 1) throw new Error('unexpected TIFF layout');
+    var out = new Float32Array(W * H), r, c, j;
+    if (T[273]) {
+      var rps = (T[278] || [H])[0], offs = T[273];
+      for (var s = 0; s < offs.length; s++) {
+        var rows = Math.min(rps, H - s * rps), dst = s * rps * W;
+        for (j = 0; j < rows * W; j++) out[dst + j] = dv.getFloat32(offs[s] + j * 4, le);
+      }
+    } else if (T[324]) {
+      var tw = T[322][0], th = T[323][0], toffs = T[324], across = Math.ceil(W / tw);
+      for (var t = 0; t < toffs.length; t++) {
+        var tx = (t % across) * tw, ty = Math.floor(t / across) * th;
+        for (r = 0; r < th && ty + r < H; r++)
+          for (c = 0; c < tw && tx + c < W; c++) out[(ty + r) * W + tx + c] = dv.getFloat32(toffs[t] + (r * tw + c) * 4, le);
+      }
+    } else throw new Error('unknown TIFF layout');
+    return { data: out, w: W, h: H };
+  }
+  function decodeTiff(buf) {
+    var head = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+    if (head[0] === 0x7B || head[0] === 0x3C) {
+      return Promise.reject(new Error('service returned an error: ' + new TextDecoder().decode(buf).slice(0, 140)));
+    }
+    if (window.GeoTIFF) {
+      return window.GeoTIFF.fromArrayBuffer(buf).then(function (t) { return t.getImage(); }).then(function (im) {
+        return im.readRasters({ interleave: false }).then(function (r) { return { data: r[0], w: im.getWidth(), h: im.getHeight() }; });
+      }).catch(function () { return parseTiff(buf); });
+    }
+    return Promise.resolve().then(function () { return parseTiff(buf); });
+  }
+
+  function loadDomain() {
+    if (conn.loading) return;
+    conn.loading = true; conn.failed = false;
+    var tok = ++conn.token;
+    setStatus(conn.area === 'wide' ? 'Loading elevation for the whole harbor and back bay. This can take a minute…' : 'Loading elevation for the path check…');
+    ensureStation().then(function () {
+      var d = domainFor(home);
+      var sw = L.CRS.EPSG3857.project(L.latLng(d.s, d.w)), ne = L.CRS.EPSG3857.project(L.latLng(d.n, d.e));
+      var spanX = ne.x - sw.x, spanY = ne.y - sw.y, cosLat = Math.cos(((d.s + d.n) / 2) * Math.PI / 180);
+      var maxPx = Math.min(d === WIDE ? MAXPX_WIDE : MAXPX, Math.ceil(Math.max(spanX, spanY) * cosLat / 1.0));
+      var res = Math.max(spanX, spanY) / maxPx;
+      var w = Math.ceil(spanX / res), h = Math.ceil(spanY / res);
+      var url = DEM + '?' + new URLSearchParams({
+        f: 'image', format: 'tiff', pixelType: 'F32', bboxSR: '3857', imageSR: '3857',
+        bbox: [sw.x, sw.y, ne.x, ne.y].join(','), size: w + ',' + h
+      }).toString();
+      return fetch(url).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.arrayBuffer();
+      }).then(decodeTiff).then(function (g) {
+        if (tok !== conn.token) return;
+        if (g.w !== w || g.h !== h) throw new Error('unexpected grid size ' + g.w + '×' + g.h);
+        conn.grid = g.data; conn.w = w; conn.h = h; conn.sw = sw; conn.ne = ne; conn.spanX = spanX; conn.spanY = spanY;
+        conn.res = spanX / w * cosLat; conn.dom = d;
+        conn.rW = new Uint8Array(w * h); conn.rS = new Uint8Array(w * h); conn.rE = new Uint8Array(w * h); conn.q = new Int32Array(w * h);
+        conn.canvas = document.createElement('canvas'); conn.canvas.width = w; conn.canvas.height = h; conn.ctx = conn.canvas.getContext('2d');
+        conn.bounds = L.latLngBounds(L.CRS.EPSG3857.unproject(sw), L.CRS.EPSG3857.unproject(ne));
+        conn.eff = null; conn.effKey = ''; conn.effNote = ''; conn.body = null; conn.band = null; conn.effBuf = null;
+        conn.ok = true; conn.loading = false; conn.rendered = false;
+        if (conn.layer) { map.removeLayer(conn.layer); conn.layer = null; }
+        if (conn.outline) map.removeLayer(conn.outline);
+        conn.outline = L.rectangle(conn.bounds, { color: '#ffffff', weight: 1.5, dashArray: '5 5', fill: false, interactive: false }).addTo(map);
+        schedule();
+      });
+    }).catch(function (err) {
+      if (tok !== conn.token) return;
+      if (conn.area === 'wide') {
+        conn.area = 'near'; conn.loading = false; conn.areaErr = (err && err.message ? err.message : 'unknown error'); syncArea(); loadDomain();
+        return;
+      }
+      conn.loading = false; conn.ok = false; conn.failed = true;
+      setStatus('The path check is unavailable (' + (err && err.message ? err.message : 'unknown error') + '). Showing all low ground instead.');
+      legacyRefresh();
+    });
+  }
+
+  function ptToPx(ll) {
+    var p = L.CRS.EPSG3857.project(L.latLng(ll[0], ll[1]));
+    return [(p.x - conn.sw.x) / conn.spanX * conn.w, (conn.ne.y - p.y) / conn.spanY * conn.h];
+  }
+  function pxToLatLng(x, y) {
+    return L.CRS.EPSG3857.unproject(L.point(conn.sw.x + (x + 0.5) / conn.w * conn.spanX, conn.ne.y - (y + 0.5) / conn.h * conn.spanY));
+  }
+  function validZ(z) { return z === z && z > -500 && z < 9000; }
+  function snapLow(px, py, r) {          // lowest valid cell within r cells of a point, or -1
+    var g = conn.grid, w = conn.w, h = conn.h, cx = Math.floor(px), cy = Math.floor(py), best = -1, bz = 1e9;
+    for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) {
+      var x = cx + dx, y = cy + dy;
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      var z = g[y * w + x];
+      if (validZ(z) && z < bz) { bz = z; best = y * w + x; }
+    }
+    return best;
+  }
+  /* The automatic starting point. The harbor and the ocean form by far the largest connected body of
+     low cells in the area, so the water is found there. The map groups all cells at or below 2 m that
+     touch each other, takes the biggest group, and starts from its lowest cell. This does not depend on
+     where the tide station sits, and it ignores single noise pits and small ponds. */
+  function autoSeed() {
+    var key = conn.token + ':auto2';
+    if (conn.autoKey === key) return conn.autoIdx;
+    conn.autoKey = key; conn.autoIdx = -1;
+    var g = conn.grid, w = conn.w, h = conn.h, N = w * h, q = conn.q, LIM = 2.0;
+    var seen = new Uint8Array(N), bestSize = 0, bestMin = -1, i, j, z, x, qh, qt, size, minI, minZ, c;
+    for (i = 0; i < N; i++) {
+      if (seen[i]) continue;
+      z = g[i];
+      if (z === z && z >= -500 && z < 9000 && z > LIM) continue;      // high ground; NaN and NoData count as low
+      qh = 0; qt = 0; q[qt++] = i; seen[i] = 1; size = 0; minI = -1; minZ = 1e9;
+      while (qh < qt) {
+        c = q[qh++]; size++; z = g[c];
+        if (validZ(z) && z < minZ) { minZ = z; minI = c; }
+        x = c % w;
+        if (x > 0)     { j = c - 1; if (!seen[j]) { z = g[j]; if (!(z === z && z >= -500 && z < 9000 && z > LIM)) { seen[j] = 1; q[qt++] = j; } } }
+        if (x < w - 1) { j = c + 1; if (!seen[j]) { z = g[j]; if (!(z === z && z >= -500 && z < 9000 && z > LIM)) { seen[j] = 1; q[qt++] = j; } } }
+        if (c >= w)    { j = c - w; if (!seen[j]) { z = g[j]; if (!(z === z && z >= -500 && z < 9000 && z > LIM)) { seen[j] = 1; q[qt++] = j; } } }
+        if (c < N - w) { j = c + w; if (!seen[j]) { z = g[j]; if (!(z === z && z >= -500 && z < 9000 && z > LIM)) { seen[j] = 1; q[qt++] = j; } } }
+      }
+      if (minI >= 0 && size > bestSize) { bestSize = size; bestMin = minI; }
+    }
+    conn.autoIdx = bestMin; conn.autoN = bestSize;
+    return bestMin;
+  }
+  function seedList() {
+    var out = [], pts = [];
+    var ai = autoSeed();
+    if (ai >= 0) { out.push(ai); pts.push(['Main body of harbor and ocean water (automatic)', ai]); }
+    conn.userSeeds.forEach(function (ll) {
+      var q = ptToPx(ll);
+      if (q[0] < 0 || q[1] < 0 || q[0] >= conn.w || q[1] >= conn.h) return;
+      var k = snapLow(q[0], q[1], 2);
+      if (k >= 0) { out.push(k); pts.push(['Water source you added', k]); }
+    });
+    conn.seedLayer.clearLayers();
+    pts.forEach(function (s) {
+      var ll = pxToLatLng(s[1] % conn.w, Math.floor(s[1] / conn.w));
+      L.circleMarker(ll, { radius: 5, color: '#fff', weight: 1.5, fillColor: '#0a6cff', fillOpacity: 1, interactive: false })
+        .bindTooltip(s[0], { direction: 'top' }).addTo(conn.seedLayer);
+    });
+    return out;
+  }
+  function floodFill(g, w, h, seeds, level, out, q) {
+    out.fill(0);
+    var N = w * h, qh = 0, qt = 0, i, j, z, x, s;
+    for (s = 0; s < seeds.length; s++) { i = seeds[s]; if (!out[i]) { out[i] = 1; q[qt++] = i; } }
+    while (qh < qt) {
+      i = q[qh++]; x = i % w;
+      if (x > 0)     { j = i - 1; if (!out[j]) { z = g[j]; if (z !== z || z < -500 || z > 9000 || z <= level) { out[j] = 1; q[qt++] = j; } } }
+      if (x < w - 1) { j = i + 1; if (!out[j]) { z = g[j]; if (z !== z || z < -500 || z > 9000 || z <= level) { out[j] = 1; q[qt++] = j; } } }
+      if (i >= w)    { j = i - w; if (!out[j]) { z = g[j]; if (z !== z || z < -500 || z > 9000 || z <= level) { out[j] = 1; q[qt++] = j; } } }
+      if (i < N - w) { j = i + w; if (!out[j]) { z = g[j]; if (z !== z || z < -500 || z > 9000 || z <= level) { out[j] = 1; q[qt++] = j; } } }
+    }
+    return qt;
+  }
+  function renderConn() {
+    var g = conn.grid, w = conn.w, h = conn.h, N = w * h, v = levels();
+    var lvW = (v.tide - SCALE_GAP) * FT, lvX = (v.water - SCALE_GAP) * FT, lvS = (v.worse - SCALE_GAP) * FT;
+    var seeds = seedList();
+    buildEff(seeds); g = conn.eff || conn.grid;
+    if (!conn.outline) conn.outline = L.rectangle(conn.bounds, { color: '#ffffff', weight: 1.5, dashArray: '5 5', fill: false, interactive: false }).addTo(map);
+    floodFill(g, w, h, seeds, lvW, conn.rW, conn.q);
+    floodFill(g, w, h, seeds, lvX, conn.rE, conn.q);
+    var nS = floodFill(g, w, h, seeds, lvS, conn.rS, conn.q);
+    conn.rendered = true;
+    var img = conn.ctx.createImageData(w, h), px = new Uint32Array(img.data.buffer);
+    for (var i = 0; i < N; i++) {
+      var z = g[i];
+      px[i] = conn.rW[i] ? BLUE : conn.rE[i] ? ORANGE : conn.rS[i] ? RED : 0;
+    }
+    conn.ctx.putImageData(img, 0, 0);
+    conn.canvas.toBlob(function (blob) {
+      if (!blob) return;
+      var url = URL.createObjectURL(blob);
+      if (conn.layer) conn.layer.setUrl(url);
+      else conn.layer = L.imageOverlay(url, conn.bounds, { opacity: $('op').value / 100, interactive: false }).addTo(map);
+      if (conn.prevUrl) URL.revokeObjectURL(conn.prevUrl);
+      conn.prevUrl = url;
+    }, 'image/png');
+    var nUser = conn.userSeeds.length;
+    setStatus(seeds.length
+      ? 'Barriers hold. Cells are about ' + conn.res.toFixed(1) + ' m wide. Water sources: ' + seeds.length + (nUser ? ' (' + nUser + ' added by you)' : '') + '. The dashed outline marks the area computed.'
+        + (nS < 0.002 * N ? ' WARNING: the water spread from its starting point covers almost nothing, so it probably started on land. Press "Add a source on the map" and click the harbor water.' : '')
+        + (conn.eff ? ' Known barriers applied: ' + barr.walls.length + ' wall area(s), ' + barr.opens.length + ' opening(s).' : (conn.effNote || ''))
+      : 'No water source found in this area. Use "Add a source on the map" and click the harbor.');
+    updateResults();
+  }
+  function refreshOverlays() {
+    if (conn.on) {
+      if (conn.ok) { clearLegacy(); renderConn(); return; }
+      if (!conn.failed) { if (!conn.loading) loadDomain(); legacyRefresh(); return; }
+    }
+    if (conn.layer) { map.removeLayer(conn.layer); conn.layer = null; }
+    if (conn.outline) { map.removeLayer(conn.outline); conn.outline = null; }
+    conn.seedLayer.clearLayers();
+    legacyRefresh();
+  }
+  function schedule() { clearTimeout(timer); timer = setTimeout(refreshOverlays, 250); }
+
+  function spotState() {
+    if (!(conn.on && conn.ok && conn.rendered)) return null;
+    var p = ptToPx(home), x = Math.floor(p[0]), y = Math.floor(p[1]);
+    if (x < 0 || y < 0 || x >= conn.w || y >= conn.h) return 'out';
+    var i = y * conn.w + x;
+    if (conn.rW[i]) return 'wet';
+    if (conn.rE[i]) return 'wet-extra';
+    if (conn.rS[i]) return 'wet-worse';
+    var z = (conn.eff || conn.grid)[i], lv = (levels().water - SCALE_GAP) * FT;
+    return (validZ(z) && z <= lv) ? 'low-disc' : 'dry';
+  }
+
+  function syncLegend() {
+    $('lg-blue').textContent = 'Under water at the forecast tide';
+    $('lg-orange').textContent = 'Under water if the water runs higher than forecast (step 3)';
+    $('lg-red').textContent = 'Under water in the worse case (step 3)';
+    $('lg-none').textContent = conn.on ? 'No color: the water does not reach it' : 'No color: the ground is higher than the water, so it stays dry';
+    $('lg-mode').textContent = conn.on
+      ? 'Showing ground the water can reach over the land from the harbor. Walls and higher ground can block it.'
+      : 'Showing every spot that is lower than the water, even if a wall or higher ground would block the water from getting there.';
+  }
+  Array.prototype.forEach.call($('barrier-mode').children, function (b) {
+    b.addEventListener('click', function () {
+      conn.on = b.getAttribute('data-b') === 'hold';
+      Array.prototype.forEach.call($('barrier-mode').children, function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      if (conn.on) { conn.failed = false; if (!conn.ok && !conn.loading) loadDomain(); }
+      syncLegend(); schedule(); updateResults();
+    });
+  });
+  syncLegend();
+  function syncArea() {
+    Array.prototype.forEach.call($('area-mode').children, function (x) { x.setAttribute('aria-pressed', x.dataset.a === (conn.area || 'near') ? 'true' : 'false'); });
+    $('area-msg').textContent = conn.area === 'wide'
+      ? 'Covers inner Newport Harbor from the entrance up to Pacific Coast Highway, and the nearby beaches. Cells are about 1.5 m wide.'
+      : (conn.areaErr ? 'The whole inner harbor could not be loaded (' + conn.areaErr + '), so the close-up area is shown. Close-up covers about 1 km around your spot and the harbor entrance.'
+        : 'Close-up covers about 1 km around your spot and the harbor entrance.');
+  }
+  Array.prototype.forEach.call($('area-mode').children, function (b) {
+    b.addEventListener('click', function () {
+      if ((conn.area || 'near') === b.dataset.a) return;
+      conn.area = b.dataset.a; conn.areaErr = ''; syncArea();
+      conn.token++; conn.loading = false; conn.ok = false; conn.rendered = false; conn.failed = false; conn.autoKey = '';
+      if (conn.layer) { map.removeLayer(conn.layer); conn.layer = null; }
+      if (conn.outline) { map.removeLayer(conn.outline); conn.outline = null; }
+      if (conn.on) loadDomain(); else schedule();
+    });
+  });
+
+  /* ---- Info buttons: short plain-language explanations that open under the label ---- */
+  var INFO = {
+    colors: { t: 'What the colors mean', h:
+      `<p>The colors show where water would cover the ground.</p>
+       <ul><li><b>Blue</b>: under water at the forecast tide.</li>
+       <li><b>Orange</b>: dry at the forecast tide, but under water if the water runs higher than forecast. That is the "extra water" in step 3.</li>
+       <li><b>Red</b>: under water only in the worse case, if you entered one in step 3.</li>
+       <li><b>No color</b>: the water does not reach it, or this tool cannot tell.</li></ul>
+       <p>No color is not a promise of safety. Water can also come up through storm drains or around a wall too thin for the map to show. This tool cannot see either. The dashed outline marks the area the tool worked out.</p>
+       <p>When the water has to find its way over land, a low yard behind a seawall or a raised street stays uncolored, because the water has no way in. Your own spot's result tells you when this applies.</p>` },
+    barriers: { t: 'Barriers hold, or barriers fail', h:
+      `<p>This switch lets you look at two situations.</p>
+       <p><b>Barriers hold.</b> Water must reach the ground over the surface. Seawalls, berms and higher streets stop it, so walled-off low spots get no color.</p>
+       <p><b>Barriers fail or are bypassed.</b> Every spot lower than the water is treated as reachable, as if a wall had a gap, a gate stood open, or a drain valve failed to close.</p>
+       <p>Compare the two. Ground that floods in both is the most exposed. Ground that floods only when barriers fail is protected by a single barrier, so check that barrier.</p>` },
+    extra: { t: 'Why add extra water?', h:
+      `<p>A tide table predicts the tide from the pull of the moon and sun. The real water can be higher than that, for example when the ocean is unusually warm, or during a storm.</p>
+       <p>The City reports that water has recently been running about 22 inches (nearly 2 feet) above the tide tables. This tool adds that extra to the forecast so you can see what could really happen.</p>
+       <ul><li><b>Not at all</b>: the forecast as printed.</li>
+       <li><b>City's estimate</b>: adds 22 inches.</li>
+       <li><b>My own</b>: you choose the number of inches.</li></ul>
+       <p>"Use the live 24 h average" measures the extra from the last 24 hours of readings, so you can use a measured number in place of the City's estimate.</p>` },
+    worse: { t: 'What is the worse case?', h:
+      `<p>A cushion for the unexpected. Enter how many more inches of water you want to test on top of everything above. A storm can push the water higher still, with wind blowing toward the coast and low air pressure. That rise is called storm surge.</p>
+       <p>Ground that floods only because of this extra amount turns red. Leave it at 0 to switch the worse case off.</p>` },
+    levels: { t: 'Reading the result', h:
+      `<p>All heights are in feet on the same scale as the tide table you see in the news, so you can compare them directly.</p>
+       <ul><li><b>Water level used</b>: the forecast tide plus the extra water you chose.</li>
+       <li><b>Ground at your spot</b>: the height of the land where the pin is.</li>
+       <li><b>Water below ground by</b>: the room to spare, in inches. If the water is higher than the ground, it shows how far over.</li>
+       <li><b>In the worse case</b>: the same measure with the worse-case water added.</li>
+       <li><b>Water can reach your spot</b>: whether the water has a way onto your ground over the surface. See the map colors.</li></ul>` },
+    sources: { t: 'Where the water starts', h:
+      `<p>The map needs to know where the water is, so it can spread from there. It starts from the harbor entrance tide station automatically.</p>
+       <p>If part of the harbor water is not blue, or the shading looks wrong, press "Add a source on the map" and click that water. You can add several. "Clear mine" removes the ones you added.</p>` },
+    live: { t: 'Live conditions', h:
+      `<p>What is happening right now, as measured by instruments.</p>
+       <ul><li><b>Water above prediction</b>: how far the real water is from what the tide table said. A plus sign means the water is running high. The 24-hour average smooths out short ups and downs. It is measured in Los Angeles, about 23 miles away, so it is a close guide but not exact.</li>
+       <li><b>Wind from</b>: the direction the wind comes from. "Onshore" means it blows from the ocean toward the coast, which pushes water and waves toward land. Inside the harbor, waves stay small.</li>
+       <li><b>Pressure</b>: low air pressure lets the sea rise slightly. The effect is small, a few inches in a typical storm.</li>
+       <li><b>Weather alerts</b>: official alerts for your spot from the National Weather Service. The "Likely effect" note under each one is a general rule of thumb from this tool, not from the weather service. Open "Read the full statement" for the official words.</li></ul>` },
+    known: { t: 'Known walls and openings', h:
+      `<p>The elevation data often misses thin seawalls, so the map can let water in where a real wall would stop it. Here you can tell the map what you know.</p>
+       <ul><li><b>Wall area</b>: press "Add a wall area", then click two opposite corners of a box around the area, for example Balboa Island. The map treats the shoreline inside the box as a wall at least as high as the "Wall height" you entered.</li>
+       <li><b>Opening</b>: press "Add an opening", then click where the wall is open, such as a ferry approach, a boat ramp or a gap at a street end. Water can pass at the "Opening height" you entered.</li></ul>
+       <p>Heights are in feet on the same scale as the tide table. The City's reports for Balboa Island list wall tops of 7.6 to 8.7 ft, and the lowest openings at 6.8 ft (ferry approach), 7.2 ft (launch ramp) and 7.5 ft (Collins Island bridge). Those reports are older, so check them against what you see.</p>
+       <p>These are your assumptions, not measurements. A wall set too high can hide real flooding, so say so if you share a result.</p>` }
+  };
+  Array.prototype.forEach.call(document.querySelectorAll('.info'), function (b) {
+    b.addEventListener('click', function () {
+      var row = b.closest('.hrow'), item = INFO[b.getAttribute('data-info')];
+      if (!row || !item) return;
+      if (row._box) { row._box.remove(); row._box = null; b.setAttribute('aria-expanded', 'false'); return; }
+      var box = document.createElement('div');
+      box.className = 'infobox'; box.setAttribute('role', 'note');
+      box.innerHTML = '<b class="t">' + item.t + '</b>' + item.h;
+      row.parentNode.insertBefore(box, row.nextSibling);
+      row._box = box; b.setAttribute('aria-expanded', 'true');
+    });
+  });
+  $('seed-add').addEventListener('click', function () {
+    if (barr.placing) setBarrPlacing(null);
+    conn.placing = !conn.placing;
+    $('seed-add').textContent = conn.placing ? 'Click the harbor water…' : 'Add a source on the map';
+    map.getContainer().style.cursor = conn.placing ? 'crosshair' : '';
+  });
+  $('seed-clear').addEventListener('click', function () { conn.userSeeds = []; schedule(); });
+
+  /* ---- Known walls and openings -----------------------------------------------------------------
+     The water body is found by flooding from the sources at the height of the water surface in the
+     elevation data. A thin band of land along that shore, inside each wall area, is raised to at least
+     the wall height. Openings cut that band down to the opening height. Only the copy of the grid used
+     for the fill is changed; the downloaded elevation values stay as they were. */
+  var barr = { walls: [], opens: [], placing: null, tmp: null, tmpMarker: null, layer: L.layerGroup().addTo(map) };
+  function setBarrPlacing(p, msg) {
+    barr.placing = p;
+    if (p) { conn.placing = false; $('seed-add').textContent = 'Add a source on the map'; }
+    if (!p && barr.tmpMarker) { map.removeLayer(barr.tmpMarker); barr.tmpMarker = null; }
+    $('barr-msg').textContent = msg || 'The elevation data can miss thin seawalls. Add what you know. Heights are in feet on the tide-table scale. Works only when "Barriers hold" is selected.';
+    map.getContainer().style.cursor = p ? 'crosshair' : '';
+  }
+  function renderBarrList() {
+    var box = $('barr-list'); box.innerHTML = '';
+    function row(text, kind, idx) {
+      var d = document.createElement('div'); d.className = 'inline';
+      var s = document.createElement('span'); s.textContent = text; d.appendChild(s);
+      var b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.textContent = 'Remove';
+      b.addEventListener('click', function () { barr[kind].splice(idx, 1); barrChanged(); });
+      d.appendChild(b); box.appendChild(d);
+    }
+    barr.walls.forEach(function (w, i) { row('Wall area ' + (i + 1) + ': at least ' + w.ft.toFixed(1) + ' ft', 'walls', i); });
+    barr.opens.forEach(function (o, i) { row('Opening ' + (i + 1) + ': ' + o.ft.toFixed(1) + ' ft', 'opens', i); });
+  }
+  function drawBarr() {
+    barr.layer.clearLayers();
+    barr.walls.forEach(function (w) {
+      L.rectangle(w.b, { color: '#ffb000', weight: 2, dashArray: '6 4', fillOpacity: 0.04, interactive: false }).addTo(barr.layer);
+    });
+    barr.opens.forEach(function (o, i) {
+      L.circleMarker(o.ll, { radius: 6, color: '#fff', weight: 2, fillColor: '#ff7a00', fillOpacity: 1, bubblingMouseEvents: false })
+        .bindTooltip('Opening ' + (i + 1) + ': ' + o.ft.toFixed(1) + ' ft', { direction: 'top' }).addTo(barr.layer);
+    });
+  }
+  function barrChanged() { renderBarrList(); drawBarr(); schedule(); }
+  function barrierClick(ll) {
+    if (!barr.placing) return false;
+    if (barr.placing === 'wall1') {
+      barr.tmp = ll;
+      barr.tmpMarker = L.circleMarker(ll, { radius: 5, color: '#fff', weight: 2, fillColor: '#ffb000', fillOpacity: 1, interactive: false }).addTo(map);
+      setBarrPlacing('wall2', 'Now click the opposite corner of the box.');
+      barr.placing = 'wall2';
+      return true;
+    }
+    if (barr.placing === 'wall2') {
+      var ft = parseFloat($('wall-ft').value);
+      barr.walls.push({ b: L.latLngBounds(barr.tmp, ll), ft: isNaN(ft) ? 7.6 : ft });
+      setBarrPlacing(null); barrChanged(); return true;
+    }
+    if (barr.placing === 'open') {
+      var of = parseFloat($('open-ft').value);
+      barr.opens.push({ ll: [ll.lat, ll.lng], ft: isNaN(of) ? 6.8 : of });
+      setBarrPlacing(null); barrChanged(); return true;
+    }
+    return false;
+  }
+  $('wall-add').addEventListener('click', function () { setBarrPlacing(barr.placing ? null : 'wall1', barr.placing ? null : 'Click one corner of a box around the area you want walled.'); });
+  $('open-add').addEventListener('click', function () { setBarrPlacing(barr.placing ? null : 'open', barr.placing ? null : 'Click where the wall is open.'); });
+  $('barr-clear').addEventListener('click', function () { barr.walls = []; barr.opens = []; setBarrPlacing(null); barrChanged(); });
+
+  function buildEff(seeds) {
+    var key = JSON.stringify([
+      barr.walls.map(function (w) { return [w.b.getSouth(), w.b.getWest(), w.b.getNorth(), w.b.getEast(), w.ft]; }),
+      barr.opens.map(function (o) { return [o.ll[0], o.ll[1], o.ft]; }), SCALE_GAP, seeds]);
+    if (conn.effKey === key) return;
+    conn.effKey = key; conn.effNote = '';
+    if (!barr.walls.length || !seeds.length) { conn.eff = null; return; }
+    var g = conn.grid, w = conn.w, h = conn.h, N = w * h, q = conn.q, i, j, x, y, s;
+    var zs = -1e9;
+    for (s = 0; s < seeds.length; s++) if (g[seeds[s]] > zs) zs = g[seeds[s]];
+    var body = conn.body || (conn.body = new Uint8Array(N));
+    var nBody = floodFill(g, w, h, seeds, zs + 0.15, body, q);       // the water surface in the data
+    if (nBody > 0.6 * N) { conn.eff = null; conn.effNote = ' Known barriers were skipped because the water area looked too large. Check the water sources.'; return; }
+    var band = conn.band || (conn.band = new Uint8Array(N)); band.fill(0);
+    var k = Math.max(2, Math.ceil(3 / conn.res)), qh = 0, qt = 0;
+    for (i = 0; i < N; i++) {
+      if (!body[i]) continue; x = i % w;
+      if ((x > 0 && !body[i - 1]) || (x < w - 1 && !body[i + 1]) || (i >= w && !body[i - w]) || (i < N - w && !body[i + w])) q[qt++] = i;
+    }
+    for (var step = 0; step < k; step++) {
+      var end = qt;
+      while (qh < end) {
+        i = q[qh++]; x = i % w;
+        if (x > 0)     { j = i - 1; if (!body[j] && !band[j]) { band[j] = 1; q[qt++] = j; } }
+        if (x < w - 1) { j = i + 1; if (!body[j] && !band[j]) { band[j] = 1; q[qt++] = j; } }
+        if (i >= w)    { j = i - w; if (!body[j] && !band[j]) { band[j] = 1; q[qt++] = j; } }
+        if (i < N - w) { j = i + w; if (!body[j] && !band[j]) { band[j] = 1; q[qt++] = j; } }
+      }
+    }
+    var eff = conn.effBuf || (conn.effBuf = new Float32Array(N)); eff.set(g);
+    barr.walls.forEach(function (wl) {
+      var wallM = (wl.ft - SCALE_GAP) * FT;
+      var a = ptToPx([wl.b.getSouth(), wl.b.getWest()]), b = ptToPx([wl.b.getNorth(), wl.b.getEast()]);
+      var x0 = Math.max(0, Math.floor(Math.min(a[0], b[0]))), x1 = Math.min(w - 1, Math.ceil(Math.max(a[0], b[0])));
+      var y0 = Math.max(0, Math.floor(Math.min(a[1], b[1]))), y1 = Math.min(h - 1, Math.ceil(Math.max(a[1], b[1])));
+      for (y = y0; y <= y1; y++) for (x = x0; x <= x1; x++) { i = y * w + x; if (band[i] && eff[i] < wallM) eff[i] = wallM; }
+    });
+    barr.opens.forEach(function (o) {
+      var openM = (o.ft - SCALE_GAP) * FT, p = ptToPx(o.ll), r = Math.max(2, Math.ceil(5 / conn.res));
+      var cx = Math.floor(p[0]), cy = Math.floor(p[1]);
+      for (y = cy - r; y <= cy + r; y++) for (x = cx - r; x <= cx + r; x++) {
+        if (x < 0 || y < 0 || x >= w || y >= h || (x - cx) * (x - cx) + (y - cy) * (y - cy) > r * r) continue;
+        i = y * w + x;
+        if (band[i] && eff[i] > g[i]) eff[i] = Math.max(g[i], openM);   // only cells the wall raised
+      }
+    });
+    conn.eff = eff;
+  }
+
+  /* ---- Results ---- */
+  var CHECKLIST = {
+    ok: ['Nothing urgent. Keep an eye on the forecast and the live reading.'],
+    tight: ['Place sandbags at the garage door and any low entries.', 'Move cars off low streets before the peak.', 'Clear leaves from nearby storm drains.', 'Move valuables off the garage floor.'],
+    bad: ['Place sandbags now at every low entry.', 'Move cars to higher ground well before the peak.', 'Move valuables and anything electrical off the ground floor.', 'Do not drive or walk through flooded streets.']
+  };
+  var strip = L.control({ position: 'bottomleft' }), stripEl = null;
+  strip.onAdd = function () { stripEl = L.DomUtil.create('div', 'mstrip'); stripEl.setAttribute('aria-live', 'polite'); L.DomEvent.disableClickPropagation(stripEl); return stripEl; };
+  strip.addTo(map);
+  function setStrip(head, cls) { if (stripEl) { stripEl.className = 'mstrip ' + cls; stripEl.textContent = head; } }
+  function updateResults() {
+    var v = levels();
+    $('r-water').textContent = ft1(v.water);
+    if (groundFt == null) return;
+    var gap = groundFt - v.water, gap2 = groundFt - v.worse;
+    $('r-ground').textContent = ft1(groundFt);
+    $('r-gap').textContent = gap > 0 ? inch(gap) : 'over by ' + inch(gap);
+    $('r-gap2').textContent = gap2 > 0 ? inch(gap2) + ' below' : 'over by ' + inch(gap2);
+    var cls, head;
+    if (gap <= 0) { cls = 'bad'; head = 'Water reaches the ground here, by ' + inch(gap); }
+    else if (gap2 <= 0) { cls = 'tight'; head = 'Water stays ' + inch(gap) + ' below the ground, but the worse case covers it'; }
+    else if (gap < 1) { cls = 'tight'; head = 'Water stays ' + inch(gap) + ' below the ground. Under a foot of room'; }
+    else { cls = 'ok'; head = 'Water stays ' + inch(gap) + ' below the ground'; }
+    var st = spotState(), note = '';
+    $('r-path').textContent = st === 'wet' ? 'Yes, even at the forecast tide' : st === 'wet-extra' ? 'Yes, once the extra water is added' : st === 'wet-worse' ? 'Only in the worse case'
+      : st === 'low-disc' ? 'No surface path found' : st === 'dry' ? 'Not needed. Ground is higher'
+      : st === 'out' ? 'Outside the computed area' : (conn.on ? 'Not computed yet' : 'Assumed. Barriers treated as failed');
+    if (st === 'low-disc' && gap <= 0) {
+      cls = 'tight'; head = 'Ground is below the water level, but no surface path from the harbor was found';
+      note = 'Water could still arrive through storm drains or seepage, which this tool does not model. Treat this as a possible risk, not a safe result.';
+    }
+    var el = $('verdict');
+    setStrip(head, cls);
+    el.className = 'verdict ' + cls;
+    el.innerHTML = '<strong>' + head + '</strong><ul>' + CHECKLIST[cls].map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>' + (note ? '<p style="margin:8px 0 0">' + note + '</p>' : '');
+  }
+
+  function fetchGround(lat, lon, cb) {
+    var u = EPQS + '?' + new URLSearchParams({ x: lon, y: lat, units: 'Feet', wkid: 4326, includeDate: 'false' });
+    fetch(u).then(function (r) { return r.json(); }).then(function (j) {
+      var v = parseFloat(j.value);
+      cb(isNaN(v) ? null : v);
+    }).catch(function () { cb(null); });
+  }
+  function setSpot(ll, zoom) {
+    home = ll;
+    try { localStorage.setItem('tfm_home', JSON.stringify([+ll[0].toFixed(6), +ll[1].toFixed(6)])); } catch (e) {}
+    try { history.replaceState(null, '', '?lat=' + ll[0].toFixed(5) + '&lng=' + ll[1].toFixed(5)); } catch (e) {}
+    marker.setLatLng(ll);
+    updateStInfo();
+    if (conn.on && conn.ok && !inDomain(ll)) { conn.ok = false; conn.rendered = false; conn.failed = false; schedule(); }
+    if (zoom) map.setView(ll, zoom);
+    groundFt = null;
+    $('r-ground').textContent = '…'; $('r-gap').textContent = '…'; $('r-gap2').textContent = '…';
+    $('verdict').className = 'verdict'; $('verdict').textContent = 'Reading ground height…';
+    fetchGround(ll[0], ll[1], function (g) {
+      if (g == null) { $('verdict').textContent = 'No ground height available for this point.'; return; }
+      groundFt = g + SCALE_GAP;
+      updateResults();
+    });
+  }
+
+  map.on('click', function (e) {
+    if (barrierClick(e.latlng)) return;
+    if (conn.placing) {
+      conn.userSeeds.push([e.latlng.lat, e.latlng.lng]);
+      conn.placing = false; $('seed-add').textContent = 'Add a source on the map'; map.getContainer().style.cursor = '';
+      schedule(); return;
+    }
+    setSpot([e.latlng.lat, e.latlng.lng], null);
+  });
+  map.on('moveend', function () { if (!(conn.on && conn.ok)) schedule(); });
+
+  /* ---- Address search ---- */
+  function findAddress() {
+    var q = $('addr').value.trim();
+    if (!q) return;
+    $('addr-msg').textContent = 'Searching…';
+    var u = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+      q: q, format: 'json', limit: '1', countrycodes: 'us', viewbox: '-118.2,33.8,-117.6,33.4'
+    });
+    fetch(u).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.length) { $('addr-msg').textContent = 'No match. Try adding the street name and city, or click the map.'; return; }
+      $('addr-msg').textContent = j[0].display_name;
+      setSpot([parseFloat(j[0].lat), parseFloat(j[0].lon)], 18);
+    }).catch(function () { $('addr-msg').textContent = 'Search unavailable. Click the map instead.'; });
+  }
+  $('find').addEventListener('click', findAddress);
+  $('addr').addEventListener('keydown', function (e) { if (e.key === 'Enter') findAddress(); });
+
+  /* ---- Tide presets ---- */
+  var chips = $('chips');
+  function clearChips() { Array.prototype.forEach.call(document.querySelectorAll('.chip'), function (c) { c.setAttribute('aria-pressed', 'false'); }); }
+  function showPeak(label, time) {
+    if (label) { $('peak-time').textContent = time + ' · ' + label; $('peak-sub').textContent = 'The highest water of the day comes around this time. Check again before then.'; }
+    else { $('peak-time').textContent = 'Pick a date to see its peak time'; $('peak-sub').textContent = 'You can type any tide height above. Peak time depends on the day.'; }
+  }
+  PRESETS.forEach(function (p) {
+    var b = document.createElement('button');
+    b.className = 'chip'; b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = p[0] + ' <small>' + p[2].toFixed(1) + ' ft</small>';
+    b.addEventListener('click', function () {
+      $('tide').value = p[2];
+      clearChips(); b.setAttribute('aria-pressed', 'true');
+      showPeak(p[1], p[3]);
+      updateResults(); schedule();
+    });
+    chips.appendChild(b);
+  });
+  $('tide').addEventListener('input', function () { clearChips(); showPeak(null); updateResults(); schedule(); });
+
+  /* ---- Tide lookup by station and date (NOAA CO-OPS predictions, high/low times, local time) ---- */
+  var NEWPORT = '9410580';
+  function hhmm(t) {
+    var p = t.split(' ')[1].split(':'), h = +p[0], ap = h >= 12 ? 'p.m.' : 'a.m.';
+    return (h % 12 || 12) + ':' + p[1] + ' ' + ap;
+  }
+  function dayLabel(t) {
+    var p = t.split(' ')[0].split('-');
+    return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  }
+  function ymd(d) { return d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()); }
+  function hilo(begin, end) {
+    var q = new URLSearchParams({
+      product: 'predictions', application: 'tide_flood_map', station: $('station').value,
+      begin_date: begin, end_date: end, datum: 'MLLW', time_zone: 'lst_ldt', units: 'english',
+      interval: 'hilo', format: 'json'
+    });
+    return fetch(CO + '?' + q).then(function (r) { return r.json(); });
+  }
+  function highs(j) { return (j.predictions || []).filter(function (p) { return p.type === 'H'; }); }
+  function applyHigh(p, btn) {
+    $('tide').value = (Math.round(parseFloat(p.v) * 10) / 10).toFixed(1);
+    clearChips();
+    if (btn) btn.setAttribute('aria-pressed', 'true');
+    showPeak(dayLabel(p.t), hhmm(p.t));
+    updateResults(); schedule();
+  }
+  function highChip(p, long) {
+    var b = document.createElement('button');
+    b.className = 'chip'; b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+    var d = new Date(p.t.split(' ')[0].split('-')[0], p.t.split(' ')[0].split('-')[1] - 1, p.t.split(' ')[0].split('-')[2]);
+    var ds = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    b.innerHTML = (long ? ds + ' ' : '') + hhmm(p.t) + ' <small>' + parseFloat(p.v).toFixed(1) + ' ft</small>';
+    b.addEventListener('click', function () {
+      if (long) $('tdate').value = p.t.split(' ')[0];
+      applyHigh(p, b);
+    });
+    return b;
+  }
+  function lookupDay() {
+    var v = $('tdate').value;
+    var res = $('tres'); res.innerHTML = '';
+    if (!v) { $('tmsg').textContent = 'Pick a date first.'; return; }
+    $('tmsg').textContent = 'Looking up…';
+    var day = v.replace(/-/g, '');
+    hilo(day, day).then(function (j) {
+      var h = highs(j);
+      if (!h.length) { $('tmsg').textContent = (j.error && j.error.message) ? j.error.message : 'No predictions for that date at this station.'; return; }
+      var best = h[0];
+      h.forEach(function (p) { if (parseFloat(p.v) > parseFloat(best.v)) best = p; });
+      var lows = (j.predictions || []).filter(function (p) { return p.type === 'L'; })
+        .map(function (p) { return hhmm(p.t) + ' ' + parseFloat(p.v).toFixed(1) + ' ft'; }).join(', ');
+      h.forEach(function (p) { var b = highChip(p, false); res.appendChild(b); if (p === best) applyHigh(p, b); });
+      $('tmsg').textContent = 'Highs shown, highest selected. Lows: ' + lows + '. Predicted tide only, before any extra water.';
+    }).catch(function () { $('tmsg').textContent = 'Lookup unavailable right now.'; });
+  }
+  function loadTop() {
+    var top = $('ttop'); top.innerHTML = '';
+    var now = new Date(), end = new Date(now.getTime() + 30 * 86400e3);
+    hilo(ymd(now), ymd(end)).then(function (j) {
+      var h = highs(j).sort(function (a, b) { return parseFloat(b.v) - parseFloat(a.v); }).slice(0, 6);
+      if (!h.length) { top.textContent = 'Not available for this station.'; return; }
+      h.forEach(function (p) { top.appendChild(highChip(p, true)); });
+    }).catch(function () { top.textContent = 'Not available right now.'; });
+  }
+  function stationChanged() {
+    var id = $('station').value;
+    $('tres').innerHTML = '';
+    $('tmsg').textContent = id === NEWPORT ? '' : 'Other stations are for comparison. Heights in Newport Harbor follow Newport Bay Entrance.';
+    // Keep ground and tide on the same scale: the gap between the two zeros comes from the station's own datums.
+    fetch('https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/' + id + '/datums.json?units=english')
+      .then(function (r) { return r.json(); }).then(function (j) {
+        var m = {}; (j.datums || []).forEach(function (d) { m[d.name] = d.value; });
+        if (m.NAVD88 != null && m.MLLW != null) { SCALE_GAP = m.NAVD88 - m.MLLW; }
+        updateResults(); schedule();
+      }).catch(function () {});
+    loadStation();
+    loadTop();
+  }
+  /* ---- Tide station marker ---- */
+  var stMarker = null, stPos = null, stName = '';
+  function miles(a, b) {
+    var R = 3958.8, rad = Math.PI / 180;
+    var dLat = (b[0] - a[0]) * rad, dLon = (b[1] - a[1]) * rad;
+    var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  function updateStInfo() {
+    if (!stPos) return;
+    $('stinfo').textContent = stName + ' · ' + miles(home, stPos).toFixed(1) + ' mi from your spot. Marked on the map with a yellow diamond.';
+  }
+  function loadStation() {
+    var id = $('station').value;
+    if (stMarker) { map.removeLayer(stMarker); stMarker = null; }
+    stPos = null; $('stinfo').textContent = 'Locating station…';
+    fetch('https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/' + id + '.json')
+      .then(function (r) { return r.json(); }).then(function (j) {
+        var s = j.stations && j.stations[0];
+        if (!s || s.lat == null) { $('stinfo').textContent = 'Station location unavailable.'; return; }
+        stPos = [s.lat, s.lng]; stName = s.name || ('Station ' + id);
+        stMarker = L.marker(stPos, { icon: L.divIcon({ className: '', html: '<div class="stn"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }) })
+          .addTo(map).bindTooltip(stName + ' (NOAA ' + id + ')', { direction: 'top' });
+        updateStInfo();
+      }).catch(function () { $('stinfo').textContent = 'Station location unavailable.'; });
+  }
+  $('fitst').addEventListener('click', function () {
+    if (!stPos) return;
+    map.fitBounds([home, stPos], { padding: [60, 60], maxZoom: 16 });
+  });
+
+  $('tlook').addEventListener('click', lookupDay);
+  $('tdate').addEventListener('keydown', function (e) { if (e.key === 'Enter') lookupDay(); });
+  $('station').addEventListener('change', stationChanged);
+  $('tdate').value = ymd(new Date()).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+
+  /* ---- Extra water ---- */
+  function setMode(m) {
+    mode = m;
+    Array.prototype.forEach.call($('mode').children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-mode') === m ? 'true' : 'false'); });
+    updateResults(); schedule();
+  }
+  Array.prototype.forEach.call($('mode').children, function (b) {
+    b.addEventListener('click', function () { setMode(b.getAttribute('data-mode')); });
+  });
+  $('extra-in').addEventListener('input', function () { setMode('custom'); });
+  $('whatif').addEventListener('input', function () { updateResults(); schedule(); });
+  $('op').addEventListener('input', function () {
+    var o = $('op').value / 100;
+    if (slots.water.layer) slots.water.layer.setOpacity(o);
+    if (slots.surge.layer) slots.surge.layer.setOpacity(o);
+    if (slots.extra.layer) slots.extra.layer.setOpacity(o);
+    if (conn.layer) conn.layer.setOpacity(o);
+  });
+
+  /* ---- Live conditions: NOAA observed anomaly + NWS alerts and wind ---- */
+  var CO = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
+  var LIVE_STATION = '9410660';
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function stamp(d) { return d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()); }
+  function coops(product, extra) {
+    var end = new Date(), start = new Date(end.getTime() - 48 * 3600e3);
+    var q = new URLSearchParams(Object.assign({
+      product: product, station: LIVE_STATION, begin_date: stamp(start), end_date: stamp(end),
+      units: 'english', time_zone: 'gmt', format: 'json', application: 'tide_flood_map'
+    }, extra || {}));
+    return fetch(CO + '?' + q).then(function (r) { return r.json(); }).catch(function () { return null; });
+  }
+  // Plain-language guide to what each kind of alert usually means for water at the coast. [effect, reason, color]
+  function alertImpact(ev) {
+    var e = ev.toLowerCase();
+    if (/tsunami/.test(e)) return ['Dangerous, fast water-level changes', 'Follow official evacuation instructions. Water can rise and fall quickly and by a lot.', 'bad'];
+    if (/coastal flood|storm surge|hurricane|tropical storm/.test(e)) return ['More water than the tide table', 'Surge, waves and runup are expected to push water above the prediction. Use a larger extra-water amount and watch the worse case.', 'bad'];
+    if (/high surf/.test(e)) return ['Bigger waves, a little more water on the ocean side', 'Large waves push water higher up the beach and can overtop berms. The harbor level changes little, but ocean-side streets and the Peninsula are at more risk.', 'tight'];
+    if (/beach hazard/.test(e)) return ['Waves and currents, not a higher tide', 'This usually means strong surf and rip currents. It does not mean the tide itself will be higher, but wave runup adds to the risk on ocean beaches when it coincides with a high tide.', 'tight'];
+    if (/rip current/.test(e)) return ['No change to the water level', 'This is about swimming safety.', 'ok'];
+    if (/flash flood|flood watch|flood warning|flood advisory|areal flood|urban and small stream/.test(e)) return ['Rain flooding, with drains that may back up', 'Heavy rain fills storm drains while a high tide holds the tidal valves shut, so streets can flood below the harbor level. The tide height itself is unchanged.', 'tight'];
+    if (/wind|gale|small craft|storm warning/.test(e)) return ['Depends on wind direction', 'Strong wind from the ocean side (south to west) can pile water against the coast and add a little to the tide. Wind from the land side (north to east) can hold it down a little. See the wind direction above.', 'tight'];
+    if (/fog|heat|frost|freeze|smoke|air quality|fire|red flag|dust/.test(e)) return ['No expected effect on water level', 'This alert is not related to tides.', 'ok'];
+    return ['No direct effect known', 'Read the full statement for water-level details.', 'ok'];
+  }
+  var COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  function toDeg(c) { var i = COMPASS.indexOf(c); return i < 0 ? null : i * 22.5; }
+  function toCompass(d) { return COMPASS[Math.round(d / 22.5) % 16]; }
+  // The Newport coast faces roughly south-southwest, so wind from about SSE through W blows toward the shore.
+  function shoreTag(deg) {
+    if (deg == null) return '';
+    if (deg >= 140 && deg <= 280) return ' · onshore';
+    if (deg >= 320 || deg <= 80) return ' · offshore';
+    return ' · along shore';
+  }
+  function loadLive() {
+    Promise.all([
+      coops('water_level', { datum: 'MLLW' }), coops('predictions', { datum: 'MLLW' }),
+      coops('air_pressure'), coops('wind')
+    ]).then(function (r) {
+      var obs = r[0] && r[0].data, pred = r[1] && r[1].predictions, pr = r[2] && r[2].data, wd = r[3] && r[3].data;
+      if (obs && pred) {
+        var pm = {}; pred.forEach(function (p) { pm[p.t] = parseFloat(p.v); });
+        var res = [];
+        obs.forEach(function (o) { var v = parseFloat(o.v); if (!isNaN(v) && pm[o.t] !== undefined) res.push(v - pm[o.t]); });
+        if (res.length) {
+          var last = res.slice(-240);
+          var avg = last.reduce(function (a, b) { return a + b; }, 0) / last.length;
+          anomalyAvgFt = avg;
+          $('l-now').textContent = signed(res[res.length - 1]);
+          $('l-avg').textContent = signed(avg) + ' (' + Math.round(avg * 12) + ' in)';
+          $('l-max').textContent = signed(Math.max.apply(null, last));
+          $('apply').disabled = false;
+          $('apply').textContent = 'Use the live 24 h average (' + Math.max(0, Math.round(avg * 12)) + ' in)';
+        } else { $('l-now').textContent = 'no data'; }
+      } else { $('l-now').textContent = 'unavailable'; }
+      if (pr && pr.length) {
+        var p = parseFloat(pr[pr.length - 1].v);
+        $('l-p').textContent = p.toFixed(1) + ' mb (' + signed((1013.25 - p) * 0.0328) + ' effect)';
+      }
+      if (wd && wd.length) {
+        var w = wd[wd.length - 1];
+        var deg = parseFloat(w.d);
+        var dir = w.dr || (isNaN(deg) ? '?' : toCompass(deg));
+        $('l-w').innerHTML = parseFloat(w.s).toFixed(0) + ' kt from ' + dir + (isNaN(deg) ? '' : ' (' + Math.round(deg) + '°)') +
+          shoreTag(isNaN(deg) ? toDeg(dir) : deg) + '<br><small>gusts ' + w.g + ' kt</small>';
+      }
+    });
+    var ll = home[0].toFixed(4) + ',' + home[1].toFixed(4);
+    fetch('https://api.weather.gov/alerts/active?point=' + ll).then(function (r) { return r.json(); }).then(function (j) {
+      var box = $('alerts'); box.innerHTML = '';
+      var link = 'https://forecast.weather.gov/MapClick.php?lat=' + home[0].toFixed(4) + '&lon=' + home[1].toFixed(4);
+      var seen = {}, list = (j.features || []).filter(function (x) {
+        var k = x.properties.id || x.id; if (seen[k]) return false; seen[k] = 1; return true;
+      });
+      if (!list.length) {
+        var none = document.createElement('div'); none.className = 'verdict ok';
+        none.innerHTML = '<strong>No active NWS alerts</strong>for this point right now. <a target="_blank" rel="noopener" href="' + link + '">NWS forecast page</a>';
+        box.appendChild(none); return;
+      }
+      list.forEach(function (x) {
+        var p = x.properties, imp = alertImpact(p.event || '');
+        var d = document.createElement('div'); d.className = 'verdict ' + imp[2];
+        var s = document.createElement('strong'); s.textContent = p.event || 'Alert'; d.appendChild(s);
+        if (p.headline) { var h = document.createElement('div'); h.textContent = p.headline; d.appendChild(h); }
+        var eff = document.createElement('span'); eff.className = 'eff'; eff.textContent = 'Likely effect: ' + imp[0]; d.appendChild(eff);
+        var why = document.createElement('div'); why.textContent = imp[1]; d.appendChild(why);
+        var w = document.createElement('div'); w.className = 'when';
+        var fmtT = function (t) { return t ? new Date(t).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; };
+        var from = fmtT(p.onset || p.effective), to = fmtT(p.ends || p.expires);
+        w.textContent = (from ? 'From ' + from : '') + (to ? ' until ' + to : '') + (p.severity ? ' · ' + p.severity : '');
+        d.appendChild(w);
+        var det = document.createElement('details'), sm = document.createElement('summary');
+        sm.textContent = 'Read the full statement'; det.appendChild(sm);
+        var pre = document.createElement('pre');
+        pre.textContent = [p.description, p.instruction].filter(Boolean).join('\n\n') || 'No text provided.';
+        det.appendChild(pre); d.appendChild(det);
+        var src = document.createElement('div'); src.className = 'src';
+        src.innerHTML = (p.senderName ? p.senderName + ' · ' : '') + '<a target="_blank" rel="noopener" href="' + link + '">Open the live NWS page</a>';
+        d.appendChild(src);
+        box.appendChild(d);
+      });
+    }).catch(function () { $('alerts').textContent = 'NWS alerts unavailable.'; });
+    fetch('https://api.weather.gov/points/' + ll).then(function (r) { return r.json(); }).then(function (j) {
+      return fetch(j.properties.forecastHourly);
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      var mx = 0, when = '', fdir = '';
+      j.properties.periods.slice(0, 48).forEach(function (p) {
+        var nums = (p.windSpeed.match(/\d+/g) || []).map(Number);
+        var v = nums.length ? Math.max.apply(null, nums) : 0;
+        if (v > mx) { mx = v; fdir = p.windDirection || ''; when = new Date(p.startTime).toLocaleString([], { weekday: 'short', hour: 'numeric' }); }
+      });
+      $('l-fw').innerHTML = mx + ' mph' + (fdir ? ' from ' + fdir : '') + shoreTag(toDeg(fdir)) + '<br><small>' + when + '</small>';
+    }).catch(function () { $('l-fw').textContent = 'unavailable'; });
+  }
+  $('apply').addEventListener('click', function () {
+    if (anomalyAvgFt == null) return;
+    $('extra-in').value = Math.max(0, Math.round(anomalyAvgFt * 12));
+    setMode('custom');
+  });
+
+  chips.children[1].click();      // open on the Oct 27 high tide
+  setSpot(home, null);
+  updateResults();
+  loadLive();
+  loadTop();
+  loadStation();
+})();
+</script>
+</body>
+</html>
