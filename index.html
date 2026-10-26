@@ -117,7 +117,7 @@ section > .hrow { margin-bottom: 8px; }
 @media (max-width: 760px) {
   /* Phone layout: the map stays pinned at the top, the controls scroll underneath it. */
   html, body { height: 100%; overflow: hidden; }
-  .app { grid-template-columns: 1fr; grid-template-rows: 26dvh 1fr; height: 100dvh; }
+  .app { grid-template-columns: 1fr; grid-template-rows: 34dvh 1fr; height: 100dvh; }
   #map { grid-row: 1; min-height: 0; padding-top: env(safe-area-inset-top); }
   .rail { grid-row: 2; border-right: 0; border-top: 1px solid var(--line); overflow-y: auto; -webkit-overflow-scrolling: touch;
           padding: 14px 14px calc(28px + env(safe-area-inset-bottom)); gap: 18px; }
@@ -131,28 +131,34 @@ section > .hrow { margin-bottom: 8px; }
             background: var(--panel); color: var(--ink); border: 2px solid var(--muted); box-shadow: 0 1px 6px rgba(0,0,0,.35); }
   .mstrip:empty { display: none; }
   .ttl, .desk-only { display: none; }
-  .quick { display: flex; flex-direction: column; gap: 10px; }
-  .qcard { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--panel); }
-  .qhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .quick { display: flex; flex-direction: column; gap: 8px; }
+  .qcard { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; background: var(--panel); }
+  .qhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
   .qlabel { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 650; }
   .qval { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
-  .qcard .seg button { min-height: 38px; font-size: 14px; padding: 4px 6px; }
-  .qpane { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .qcard .seg button { min-height: 36px; font-size: 14px; padding: 4px 6px; }
+  .qpane { margin-top: 6px; font-size: 13px; color: var(--muted); }
   .qpane[hidden] { display: none; }
-  .qpane .chips { max-height: 190px; overflow-y: auto; }
+  .qsheet { position: fixed; inset: 0; z-index: 3000; display: flex; flex-direction: column; justify-content: flex-end; }
+  .qsheet[hidden] { display: none; }
+  .qsh-back { position: absolute; inset: 0; background: rgba(0,0,0,.4); }
+  .qsh-panel { position: relative; background: var(--panel); border-radius: 16px 16px 0 0; padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); max-height: 62dvh; overflow-y: auto; box-shadow: 0 -4px 20px rgba(0,0,0,.35); }
+  .qsh-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .qsh-head b { font-size: 16px; } .qsh-head small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+  .qsh-panel .chip { min-height: 44px; }
   .qstep { display: grid; grid-template-columns: 56px 1fr 56px; gap: 8px; align-items: center; }
-  .qstep button { min-height: 48px; font-size: 26px; line-height: 1; border-radius: 10px; border: 1px solid var(--line); background: var(--chip, var(--bg)); color: var(--ink); touch-action: manipulation; -webkit-user-select: none; user-select: none; }
-  .qstep input { text-align: center; font-size: 22px; font-weight: 700; min-height: 48px; }
+  .qstep button { min-height: 44px; font-size: 26px; line-height: 1; border-radius: 10px; border: 1px solid var(--line); background: var(--chip, var(--bg)); color: var(--ink); touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+  .qstep input { text-align: center; font-size: 22px; font-weight: 700; min-height: 44px; }
   .qsrc { font-size: 11.5px; color: var(--muted); text-align: right; line-height: 1.25; max-width: 62%; }
   .qnum { position: relative; }
   .qnum span { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; pointer-events: none; }
-  .qchips { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
-  .qc { flex: 1 1 auto; min-height: 36px; padding: 6px 6px; white-space: nowrap; border-radius: 999px; border: 1px solid var(--line); background: var(--chip, #eef2f4); color: var(--ink); font: 13px var(--font); touch-action: manipulation; }
+  .qchips { display: flex; gap: 6px; margin-top: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .qc { flex: 1 1 auto; min-height: 34px; padding: 6px 6px; white-space: nowrap; border-radius: 999px; border: 1px solid var(--line); background: var(--chip, #eef2f4); color: var(--ink); font: 13px var(--font); touch-action: manipulation; }
   .qc[aria-pressed="true"] { background: var(--water); border-color: var(--water); color: #fff; }
   .qc:disabled { opacity: .45; }
-  .qwi { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .qwi { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
   .qwi .seg { flex: 1; }
-  .qwi .seg button { min-height: 34px; }
+  .qwi .seg button { min-height: 32px; }
   #qverdict { margin: 0; }
   #qverdict ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
   #map { grid-row: 1; }
@@ -173,7 +179,7 @@ section > .hrow { margin-bottom: 8px; }
           <button type="button" data-t="type" aria-pressed="false">Type it</button>
         </div>
         <div class="qpane" id="qp-now"><span id="q-now-note">Looking up the current tide…</span></div>
-        <div class="qpane" id="qp-high" hidden><div>Predicted highs of 6.5 ft or more in the next 90 days. Tap one:</div><div class="chips" id="qhigh" style="margin-top:6px"></div></div>
+        <div class="qpane" id="qp-high" hidden><span id="qp-high-note">Pick a tide from the list.</span></div>
         <div class="qpane" id="qp-type" hidden><div class="hero-input"><input id="q-tide-in" type="number" step="0.1" inputmode="decimal" aria-label="Tide height in feet"><span>ft</span></div></div>
       </div>
       <div class="qcard">
@@ -198,6 +204,13 @@ section > .hrow { margin-bottom: 8px; }
         </div>
       </div>
       <div class="verdict" id="qverdict" aria-live="polite"></div>
+      <div class="qsheet" id="q-sheet" hidden>
+        <div class="qsh-back" id="q-sheet-back"></div>
+        <div class="qsh-panel" role="dialog" aria-label="Pick a high tide">
+          <div class="qsh-head"><b>Pick a high tide <small>Predicted, 6.5 ft and up, next 90 days</small></b><button type="button" class="btn" id="q-sheet-x">Close</button></div>
+          <div class="chips" id="qhigh"></div>
+        </div>
+      </div>
     </div>
     <div class="ttl">
       <h1>Tide Flood Map</h1>
@@ -1097,6 +1110,11 @@ section > .hrow { margin-bottom: 8px; }
   function highs(j) { return (j.predictions || []).filter(function (p) { return p.type === 'H'; }); }
   function applyHigh(p, btn) {
     $('tide').value = (Math.round(parseFloat(p.v) * 10) / 10).toFixed(1);
+    if ($('q-sheet') && !$('q-sheet').hidden) {
+      sheetPicked = true;
+      $('qp-high-note').textContent = 'Selected: ' + dayLabel(p.t) + ', ' + hhmm(p.t) + ', ' + parseFloat(p.v).toFixed(1) + ' ft. Tap "Highest tides" to change.';
+      closeSheet();
+    }
     clearChips();
     if (btn) btn.setAttribute('aria-pressed', 'true');
     showPeak(dayLabel(p.t), hhmm(p.t));
@@ -1210,11 +1228,22 @@ section > .hrow { margin-bottom: 8px; }
     if (document.activeElement !== $('q-extra-in')) $('q-extra-in').value = inch;
     if (document.activeElement !== $('q-tide-in')) $('q-tide-in').value = v.tide.toFixed(1);
   }
+  var sheetFrom = null, sheetPicked = false;
+  function openSheet() { sheetPicked = false; $('q-sheet').hidden = false; }
+  function closeSheet() {
+    if ($('q-sheet').hidden) return;
+    $('q-sheet').hidden = true;
+    if (!sheetPicked && sheetFrom && sheetFrom !== 'high') setQTab(sheetFrom);      // closed without choosing: go back
+  }
+  $('q-sheet-x').addEventListener('click', closeSheet);
+  $('q-sheet-back').addEventListener('click', closeSheet);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
   function setQTab(t) {
     qTab = t;
     Array.prototype.forEach.call($('q-tabs').children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-t') === t ? 'true' : 'false'); });
     $('qp-now').hidden = t !== 'now'; $('qp-high').hidden = t !== 'high'; $('qp-type').hidden = t !== 'type';
     if (t === 'now') loadNow();
+    if (t === 'high') openSheet();
   }
   function setTideValue(x) { $('tide').value = x.toFixed(1); $('tide').dispatchEvent(new Event('input')); }
   function loadNow() {
@@ -1229,10 +1258,10 @@ section > .hrow { margin-bottom: 8px; }
       var a = P[i], b = P[i + 1] || P[i], v = b[0] === a[0] ? a[1] : a[1] + (b[1] - a[1]) * (n - a[0]) / (b[0] - a[0]);
       if (qTab !== 'now') return;
       setTideValue(v);
-      $('q-now-note').textContent = 'Predicted tide at this moment' + (b[1] > a[1] ? ', rising' : b[1] < a[1] ? ', falling' : '') + '. Source: NOAA, Newport Bay Entrance.';
+      $('q-now-note').textContent = 'Predicted now' + (b[1] > a[1] ? ', rising' : b[1] < a[1] ? ', falling' : '') + ' · NOAA Newport Bay';
     }).catch(function () { $('q-now-note').textContent = 'Could not get the current tide. Pick "Highest tides" or type a height.'; });
   }
-  Array.prototype.forEach.call($('q-tabs').children, function (b) { b.addEventListener('click', function () { setQTab(b.getAttribute('data-t')); }); });
+  Array.prototype.forEach.call($('q-tabs').children, function (b) { b.addEventListener('click', function () { var t = b.getAttribute('data-t'); if (t === 'high') sheetFrom = qTab; setQTab(t); }); });
   $('q-tide-in').addEventListener('input', function () { if (this.value !== '') { $('tide').value = this.value; $('tide').dispatchEvent(new Event('input')); } });
   function stepExtra(d) {
     var cur = Math.round((levels().water - levels().tide) * 12), v = Math.max(0, cur + d);
