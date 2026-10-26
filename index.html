@@ -100,6 +100,8 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--water); out
 .row2 label { display: block; margin-bottom: 4px; }
 #barr-list { display: grid; gap: 6px; margin-top: 8px; font-size: 13px; }
 #barr-list .inline { justify-content: space-between; }
+.drawbar { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 80px); }
+.drawbar .btn { background: var(--panel); box-shadow: 0 1px 5px rgba(0,0,0,.4); }
 .hrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .hrow h2, .hrow label { margin: 0; }
 section > .hrow { margin-bottom: 8px; }
@@ -352,18 +354,20 @@ section > .hrow { margin-bottom: 8px; }
         <p class="hint" id="seed-msg">The harbor entrance tide station is the starting point. If part of the harbor water isn't blue, press the button, then click that water.</p>
       </div>
       <div class="field" style="margin-top:10px">
-        <div class="hrow"><label>Known walls and openings (optional)</label><button class="info" type="button" data-info="known" aria-expanded="false" aria-label="More about known walls and openings">i</button></div>
+        <div class="hrow"><label>Known walls (optional)</label><button class="info" type="button" data-info="known" aria-expanded="false" aria-label="More about known walls">i</button></div>
+        <label class="inline" style="gap:8px;margin:2px 0 6px"><input type="checkbox" id="walls-on" checked> Use the walls below</label>
         <div class="row2">
-          <div><label for="wall-ft">Wall height</label><div class="inline"><input id="wall-ft" type="number" step="0.1" value="7.6"><span class="unit">ft</span></div></div>
-          <div><label for="open-ft">Opening height</label><div class="inline"><input id="open-ft" type="number" step="0.1" value="6.8"><span class="unit">ft</span></div></div>
-        </div>
-        <div class="inline" style="margin-top:6px;flex-wrap:wrap">
-          <button class="btn" id="wall-add" type="button">Add a wall area</button>
-          <button class="btn" id="open-add" type="button">Add an opening</button>
-          <button class="btn" id="barr-clear" type="button">Clear all</button>
+          <div><label for="wall-ft">Height of the next line</label><div class="inline"><input id="wall-ft" type="number" step="0.1" value="7.6"><span class="unit">ft</span></div></div>
+          <div><label>&nbsp;</label><button class="btn" id="wall-draw" type="button">Draw a wall line</button></div>
         </div>
         <div id="barr-list"></div>
-        <p class="hint" id="barr-msg">The elevation data can miss thin seawalls. Add what you know. Heights are in feet on the tide-table scale. Works only when "Barriers hold" is selected.</p>
+        <div class="inline" style="margin-top:8px;flex-wrap:wrap">
+          <button class="btn" id="wall-save" type="button">Save as file</button>
+          <button class="btn" id="wall-load" type="button">Load a file</button>
+          <button class="btn" id="barr-clear" type="button">Clear all</button>
+          <input type="file" id="wall-file" accept=".geojson,.json,application/geo+json,application/json" hidden>
+        </div>
+        <p class="hint" id="barr-msg">The elevation data can miss thin seawalls. Draw a line along a wall and give it a height. Heights are in feet on the tide-table scale. Works only when "Barriers hold" is selected.</p>
       </div>
       <div class="field" style="margin-top:10px"><label for="op">Overlay opacity</label><input id="op" type="range" min="20" max="100" value="60"></div>
       <div id="status">Loading flood layer…</div>
@@ -375,7 +379,7 @@ section > .hrow { margin-bottom: 8px; }
       <ul>
         <li>Ground heights come from a lidar model and can be off by a few inches. Treat anything within a foot as uncertain.</li>
         <li>With "Barriers hold" selected, water spreads from the harbor only over ground lower than the water level, so walled-off low spots get no color. The map is built from cells about 1 to 2 meters wide, so a thin wall or a narrow gap can be missed either way. No color does not mean safe. Choose "Barriers fail or are bypassed" to see everything that is low.</li>
-        <li>Walls and openings you add under "Known walls and openings" are your assumptions, not measurements. A wall set too high can hide real flooding, so say so when you share a result.</li>
+        <li>Walls you draw or load under "Known walls" are your assumptions, not measurements. A wall set too high can hide real flooding, so say so when you share a result.</li>
         <li>Storm drains, tidal valves, pumps, sandbags and berms are not included. Drain backup can flood streets below the harbor level.</li>
         <li>The 22-inch figure is the City's illustration. Actual water has run 18 to 22 inches or more above forecast.</li>
       </ul>
@@ -608,7 +612,7 @@ section > .hrow { margin-bottom: 8px; }
         conn.rW = new Uint8Array(w * h); conn.rS = new Uint8Array(w * h); conn.rE = new Uint8Array(w * h); conn.q = new Int32Array(w * h);
         conn.canvas = document.createElement('canvas'); conn.canvas.width = w; conn.canvas.height = h; conn.ctx = conn.canvas.getContext('2d');
         conn.bounds = L.latLngBounds(L.CRS.EPSG3857.unproject(sw), L.CRS.EPSG3857.unproject(ne));
-        conn.eff = null; conn.effKey = ''; conn.effNote = ''; conn.body = null; conn.band = null; conn.effBuf = null;
+        conn.eff = null; conn.effKey = ''; conn.hBuf = null; conn.effBuf = null;
         conn.ok = true; conn.loading = false; conn.rendered = false;
         if (conn.layer) { map.removeLayer(conn.layer); conn.layer = null; }
         if (conn.outline) map.removeLayer(conn.outline);
@@ -671,7 +675,22 @@ section > .hrow { margin-bottom: 8px; }
       }
       if (minI >= 0 && size > bestSize) { bestSize = size; bestMin = minI; }
     }
-    conn.autoIdx = bestMin; conn.autoN = bestSize;
+    conn.autoIdx = bestMin; conn.autoN = bestSize; conn.waterZ = null;
+    if (bestMin >= 0) {                      // the water surface: a high percentile of the heights in that body, so one deep pit cannot skew it
+      var vis = new Uint8Array(N), hist = new Uint32Array(250), nv = 0, cnt = 0, b, bin;
+      qh = 0; qt = 0; q[qt++] = bestMin; vis[bestMin] = 1;
+      while (qh < qt) {
+        c = q[qh++]; z = g[c];
+        if (validZ(z)) { bin = Math.max(0, Math.min(249, Math.floor((z + 10) / 0.05))); hist[bin]++; nv++; }
+        x = c % w;
+        if (x > 0)     { j = c - 1; if (!vis[j]) { z = g[j]; if (!(z === z && z >= -500 && z < 9000 && z > LIM)) { vis[j] = 1; q[qt++] = j; } } }
+        if (x < w - 1) { j = c + 1; if (!vis[j]) { z = g[j]; if (!(z === z && z >= -500 && z < 9000 && z > LIM)) { vis[j] = 1; q[qt++] = j; } } }
+        if (c >= w)    { j = c - w; if (!vis[j]) { z = g[j]; if (!(z === z && z >= -500 && z < 9000 && z > LIM)) { vis[j] = 1; q[qt++] = j; } } }
+        if (c < N - w) { j = c + w; if (!vis[j]) { z = g[j]; if (!(z === z && z >= -500 && z < 9000 && z > LIM)) { vis[j] = 1; q[qt++] = j; } } }
+      }
+      for (b = 0; b < 250 && nv; b++) { cnt += hist[b]; if (cnt >= 0.8 * nv) break; }
+      conn.waterZ = Math.min(1.5, -10 + (b + 1) * 0.05 + 0.15);
+    }
     return bestMin;
   }
   function seedList() {
@@ -709,7 +728,12 @@ section > .hrow { margin-bottom: 8px; }
     var g = conn.grid, w = conn.w, h = conn.h, N = w * h, v = levels();
     var lvW = (v.tide - SCALE_GAP) * FT, lvX = (v.water - SCALE_GAP) * FT, lvS = (v.worse - SCALE_GAP) * FT;
     var seeds = seedList();
-    buildEff(seeds); g = conn.eff || conn.grid;
+    buildEff(); g = conn.eff || conn.grid;
+    if (barr.lines.length && barr.on && !barr.placing) {
+      $('barr-msg').textContent = conn.raised > 0
+        ? 'Walls applied: ' + barr.lines.length + ' line(s), ' + conn.raised + ' cells raised or blocked (about ' + Math.round(conn.raised * conn.res) + ' m of wall). Heights are on the tide-table scale.'
+        : 'Nothing changed: your lines lie outside the computed area, or the ground under them is already higher than the wall height.';
+    }
     if (!conn.outline) conn.outline = L.rectangle(conn.bounds, { color: '#ffffff', weight: 1.5, dashArray: '5 5', fill: false, interactive: false }).addTo(map);
     floodFill(g, w, h, seeds, lvW, conn.rW, conn.q);
     floodFill(g, w, h, seeds, lvX, conn.rE, conn.q);
@@ -733,7 +757,7 @@ section > .hrow { margin-bottom: 8px; }
     setStatus(seeds.length
       ? 'Barriers hold. Cells are about ' + conn.res.toFixed(1) + ' m wide. Water sources: ' + seeds.length + (nUser ? ' (' + nUser + ' added by you)' : '') + '. The dashed outline marks the area computed.'
         + (nS < 0.002 * N ? ' WARNING: the water spread from its starting point covers almost nothing, so it probably started on land. Press "Add a source on the map" and click the harbor water.' : '')
-        + (conn.eff ? ' Known barriers applied: ' + barr.walls.length + ' wall area(s), ' + barr.opens.length + ' opening(s).' : (conn.effNote || ''))
+        + (conn.eff ? ' Wall lines applied: ' + barr.lines.length + '.' : '')
       : 'No water source found in this area. Use "Add a source on the map" and click the harbor.');
     updateResults();
   }
@@ -839,12 +863,13 @@ section > .hrow { margin-bottom: 8px; }
        <li><b>Wind from</b>: the direction the wind comes from. "Onshore" means it blows from the ocean toward the coast, which pushes water and waves toward land. Inside the harbor, waves stay small.</li>
        <li><b>Pressure</b>: low air pressure lets the sea rise slightly. The effect is small, a few inches in a typical storm.</li>
        <li><b>Weather alerts</b>: official alerts for your spot from the National Weather Service. The "Likely effect" note under each one is a general rule of thumb from this tool, not from the weather service. Open "Read the full statement" for the official words.</li></ul>` },
-    known: { t: 'Known walls and openings', h:
-      `<p>The elevation data often misses thin seawalls, so the map can let water in where a real wall would stop it. Here you can tell the map what you know.</p>
-       <ul><li><b>Wall area</b>: press "Add a wall area", then click two opposite corners of a box around the area, for example Balboa Island. The map treats the shoreline inside the box as a wall at least as high as the "Wall height" you entered.</li>
-       <li><b>Opening</b>: press "Add an opening", then click where the wall is open, such as a ferry approach, a boat ramp or a gap at a street end. Water can pass at the "Opening height" you entered.</li></ul>
-       <p>Heights are in feet on the same scale as the tide table. The City's reports for Balboa Island list wall tops of 7.6 to 8.7 ft, and the lowest openings at 6.8 ft (ferry approach), 7.2 ft (launch ramp) and 7.5 ft (Collins Island bridge). Those reports are older, so check them against what you see.</p>
-       <p>These are your assumptions, not measurements. A wall set too high can hide real flooding, so say so if you share a result.</p>` }
+    known: { t: 'Known walls', h:
+      `<p>The elevation data often misses thin seawalls, so the map can let water in where a real wall would stop it. Here you can draw the walls yourself.</p>
+       <ul><li><b>Draw a wall line</b>: set the height, press the button, then click along the top of the wall, point by point. Zoom in first. Press "Finish line" when you are done.</li>
+       <li><b>Openings</b>: a gap in a wall, such as a ferry approach or a boat ramp, is a short line drawn <i>after</i> the main wall, with its own lower height. A line listed later overrides one listed earlier where they cross.</li>
+       <li><b>Save as file</b>: downloads walls.geojson. Put that file next to index.html on GitHub and the page loads it for everyone, including on a phone. "Load a file" brings in a GeoJSON made elsewhere, for example in ArcGIS.</li></ul>
+       <p>Heights are in feet on the same scale as the tide table. The City's older reports for Balboa Island list wall tops of 7.6 to 8.7 ft, and the lowest openings at 6.8 ft (ferry approach), 7.2 ft (launch ramp) and 7.5 ft (Collins Island bridge). Check them against what you see.</p>
+       <p>A line never lowers ground that is already higher. These are your assumptions, not measurements. A wall set too high can hide real flooding, so say so if you share a result.</p>` }
   };
   Array.prototype.forEach.call(document.querySelectorAll('.info'), function (b) {
     b.addEventListener('click', function () {
@@ -866,114 +891,149 @@ section > .hrow { margin-bottom: 8px; }
   });
   $('seed-clear').addEventListener('click', function () { conn.userSeeds = []; schedule(); });
 
-  /* ---- Known walls and openings -----------------------------------------------------------------
-     The water body is found by flooding from the sources at the height of the water surface in the
-     elevation data. A thin band of land along that shore, inside each wall area, is raised to at least
-     the wall height. Openings cut that band down to the opening height. Only the copy of the grid used
-     for the fill is changed; the downloaded elevation values stay as they were. */
-  var barr = { walls: [], opens: [], placing: null, tmp: null, tmpMarker: null, layer: L.layerGroup().addTo(map) };
-  function setBarrPlacing(p, msg) {
-    barr.placing = p;
-    if (p) { conn.placing = false; $('seed-add').textContent = 'Add a source on the map'; }
-    if (!p && barr.tmpMarker) { map.removeLayer(barr.tmpMarker); barr.tmpMarker = null; }
-    $('barr-msg').textContent = msg || 'The elevation data can miss thin seawalls. Add what you know. Heights are in feet on the tide-table scale. Works only when "Barriers hold" is selected.';
-    map.getContainer().style.cursor = p ? 'crosshair' : '';
+  /* ---- Known walls: lines drawn along a wall crest, or loaded from a GeoJSON file ---------------------
+     Each line has a height on the tide-table scale. The line is turned into a thin barrier in the copy of
+     the elevation grid used for the flood fill, so water cannot cross it below that height. Lines never
+     lower ground that is already higher. Where lines overlap, the one listed later wins, so an opening
+     drawn after the main wall cuts the wall down to its own height. */
+  var barr = { lines: [], on: true, placing: null, pts: [], vmarks: L.layerGroup().addTo(map), preview: null, layer: L.layerGroup().addTo(map) };
+  if (location.search.indexOf('debug=1') >= 0) window.__tfm = { conn: conn, barr: barr, map: map };
+  var DEFAULT_WALL_FT = 7.6;
+  function saveLines() {
+    try { localStorage.setItem('tfm_lines', JSON.stringify(barr.lines.filter(function (l) { return l.src === 'drawn'; }).map(function (l) { return { ll: l.ll, ft: l.ft }; }))); } catch (e) {}
+  }
+  function addGeoJSON(gj, src, atFront) {
+    var feats = gj && gj.type === 'FeatureCollection' ? gj.features : gj && gj.type === 'Feature' ? [gj] : [], added = [];
+    function ring(c, ft) { var ll = c.map(function (p) { return [p[1], p[0]]; }).filter(function (p) { return isFinite(p[0]) && isFinite(p[1]); }); if (ll.length >= 2) added.push({ ll: ll, ft: ft, src: src }); }
+    feats.forEach(function (f) {
+      var g = f && f.geometry; if (!g) return;
+      var pr = f.properties || {}, ft = parseFloat(pr.height_ft != null ? pr.height_ft : pr.height != null ? pr.height : pr.HEIGHT_FT);
+      if (!isFinite(ft)) ft = DEFAULT_WALL_FT;
+      if (g.type === 'LineString') ring(g.coordinates, ft);
+      else if (g.type === 'MultiLineString') g.coordinates.forEach(function (c) { ring(c, ft); });
+      else if (g.type === 'Polygon') g.coordinates.forEach(function (c) { ring(c, ft); });
+      else if (g.type === 'MultiPolygon') g.coordinates.forEach(function (pg) { pg.forEach(function (c) { ring(c, ft); }); });
+    });
+    barr.lines = atFront ? added.concat(barr.lines) : barr.lines.concat(added);
+    return added.length;
+  }
+  function toGeoJSON() {
+    return { type: 'FeatureCollection', features: barr.lines.map(function (l, i) {
+      return { type: 'Feature', properties: { name: 'Wall ' + (i + 1), height_ft: l.ft }, geometry: { type: 'LineString', coordinates: l.ll.map(function (p) { return [+p[1].toFixed(7), +p[0].toFixed(7)]; }) } };
+    }) };
   }
   function renderBarrList() {
     var box = $('barr-list'); box.innerHTML = '';
-    function row(text, kind, idx) {
+    barr.lines.forEach(function (l, i) {
       var d = document.createElement('div'); d.className = 'inline';
-      var s = document.createElement('span'); s.textContent = text; d.appendChild(s);
+      var t = document.createElement('span'); t.textContent = 'Line ' + (i + 1) + (l.src === 'file' ? ' (from file)' : '') + ':'; d.appendChild(t);
+      var inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.1'; inp.value = l.ft; inp.style.maxWidth = '84px'; inp.setAttribute('aria-label', 'Height of line ' + (i + 1) + ' in feet');
+      inp.addEventListener('change', function () { var v = parseFloat(inp.value); if (isFinite(v)) { l.ft = v; saveLines(); barrChanged(true); } });
+      d.appendChild(inp);
+      var u = document.createElement('span'); u.textContent = 'ft'; d.appendChild(u);
       var b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.textContent = 'Remove';
-      b.addEventListener('click', function () { barr[kind].splice(idx, 1); barrChanged(); });
+      b.addEventListener('click', function () { barr.lines.splice(i, 1); saveLines(); barrChanged(); });
       d.appendChild(b); box.appendChild(d);
-    }
-    barr.walls.forEach(function (w, i) { row('Wall area ' + (i + 1) + ': at least ' + w.ft.toFixed(1) + ' ft', 'walls', i); });
-    barr.opens.forEach(function (o, i) { row('Opening ' + (i + 1) + ': ' + o.ft.toFixed(1) + ' ft', 'opens', i); });
+    });
   }
   function drawBarr() {
     barr.layer.clearLayers();
-    barr.walls.forEach(function (w) {
-      L.rectangle(w.b, { color: '#ffb000', weight: 2, dashArray: '6 4', fillOpacity: 0.04, interactive: false }).addTo(barr.layer);
-    });
-    barr.opens.forEach(function (o, i) {
-      L.circleMarker(o.ll, { radius: 6, color: '#fff', weight: 2, fillColor: '#ff7a00', fillOpacity: 1, bubblingMouseEvents: false })
-        .bindTooltip('Opening ' + (i + 1) + ': ' + o.ft.toFixed(1) + ' ft', { direction: 'top' }).addTo(barr.layer);
+    if (!barr.on) return;
+    barr.lines.forEach(function (l, i) {
+      L.polyline(l.ll, { color: '#ffb000', weight: 4, opacity: 0.95, interactive: true }).bindTooltip('Line ' + (i + 1) + ': ' + l.ft.toFixed(1) + ' ft', { sticky: true }).addTo(barr.layer);
     });
   }
-  function barrChanged() { renderBarrList(); drawBarr(); schedule(); }
+  function barrChanged(skipList) { if (!skipList) renderBarrList(); drawBarr(); schedule(); }
+  // On-map buttons while drawing
+  var drawbar = L.control({ position: 'topright' }), drawEl = null;
+  drawbar.onAdd = function () {
+    drawEl = L.DomUtil.create('div', 'drawbar'); drawEl.style.display = 'none';
+    drawEl.innerHTML = '<button type="button" class="btn" data-d="undo">Undo point</button><button type="button" class="btn" data-d="finish">Finish line</button><button type="button" class="btn" data-d="cancel">Cancel</button>';
+    L.DomEvent.disableClickPropagation(drawEl);
+    drawEl.addEventListener('click', function (e) { var d = e.target.getAttribute && e.target.getAttribute('data-d'); if (d === 'undo') undoPoint(); else if (d === 'finish') finishLine(); else if (d === 'cancel') setBarrPlacing(null); });
+    return drawEl;
+  };
+  drawbar.addTo(map);
+  function refreshPreview() {
+    barr.vmarks.clearLayers();
+    if (barr.preview) { map.removeLayer(barr.preview); barr.preview = null; }
+    barr.pts.forEach(function (p) { L.circleMarker(p, { radius: 5, color: '#fff', weight: 2, fillColor: '#ffb000', fillOpacity: 1, interactive: false }).addTo(barr.vmarks); });
+    if (barr.pts.length > 1) barr.preview = L.polyline(barr.pts, { color: '#ffb000', weight: 3, dashArray: '6 5', interactive: false }).addTo(map);
+  }
+  function setBarrPlacing(p, msg) {
+    barr.placing = p; barr.pts = []; refreshPreview();
+    if (p) { conn.placing = false; $('seed-add').textContent = 'Add a source on the map'; map.doubleClickZoom.disable(); } else map.doubleClickZoom.enable();
+    if (drawEl) drawEl.style.display = p ? 'flex' : 'none';
+    $('wall-draw').textContent = p ? 'Stop drawing' : 'Draw a wall line';
+    $('barr-msg').textContent = msg || (p ? 'Click along the wall, point by point. Zoom in for accuracy. Press Finish line when done.' : 'The elevation data can miss thin seawalls. Draw a line along a wall and give it a height. Heights are in feet on the tide-table scale. Works only when "Barriers hold" is selected.');
+    map.getContainer().style.cursor = p ? 'crosshair' : '';
+  }
+  function undoPoint() { barr.pts.pop(); refreshPreview(); }
+  function finishLine() {
+    if (barr.pts.length < 2) { $('barr-msg').textContent = 'A line needs at least two points. Keep clicking along the wall.'; return; }
+    var ft = parseFloat($('wall-ft').value); if (!isFinite(ft)) ft = DEFAULT_WALL_FT;
+    barr.lines.push({ ll: barr.pts.map(function (p) { return [p.lat, p.lng]; }), ft: ft, src: 'drawn' });
+    saveLines(); setBarrPlacing(null); barrChanged();
+  }
   function barrierClick(ll) {
-    if (!barr.placing) return false;
-    if (barr.placing === 'wall1') {
-      barr.tmp = ll;
-      barr.tmpMarker = L.circleMarker(ll, { radius: 5, color: '#fff', weight: 2, fillColor: '#ffb000', fillOpacity: 1, interactive: false }).addTo(map);
-      setBarrPlacing('wall2', 'Now click the opposite corner of the box.');
-      barr.placing = 'wall2';
-      return true;
-    }
-    if (barr.placing === 'wall2') {
-      var ft = parseFloat($('wall-ft').value);
-      barr.walls.push({ b: L.latLngBounds(barr.tmp, ll), ft: isNaN(ft) ? 7.6 : ft });
-      setBarrPlacing(null); barrChanged(); return true;
-    }
-    if (barr.placing === 'open') {
-      var of = parseFloat($('open-ft').value);
-      barr.opens.push({ ll: [ll.lat, ll.lng], ft: isNaN(of) ? 6.8 : of });
-      setBarrPlacing(null); barrChanged(); return true;
-    }
-    return false;
+    if (barr.placing !== 'line') return false;
+    barr.pts.push(ll); refreshPreview(); return true;
   }
-  $('wall-add').addEventListener('click', function () { setBarrPlacing(barr.placing ? null : 'wall1', barr.placing ? null : 'Click one corner of a box around the area you want walled.'); });
-  $('open-add').addEventListener('click', function () { setBarrPlacing(barr.placing ? null : 'open', barr.placing ? null : 'Click where the wall is open.'); });
-  $('barr-clear').addEventListener('click', function () { barr.walls = []; barr.opens = []; setBarrPlacing(null); barrChanged(); });
+  $('wall-draw').addEventListener('click', function () { setBarrPlacing(barr.placing ? null : 'line'); });
+  $('barr-clear').addEventListener('click', function () { barr.lines = []; saveLines(); setBarrPlacing(null); barrChanged(); });
+  $('walls-on').addEventListener('change', function () { barr.on = this.checked; barrChanged(true); });
+  $('wall-save').addEventListener('click', function () {
+    if (!barr.lines.length) { $('barr-msg').textContent = 'There are no lines to save yet.'; return; }
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(toGeoJSON(), null, 1)], { type: 'application/geo+json' }));
+    a.download = 'walls.geojson'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    $('barr-msg').textContent = 'Saved walls.geojson. Put it in the same folder as index.html on GitHub and every visitor will get these walls.';
+  });
+  $('wall-load').addEventListener('click', function () { $('wall-file').click(); });
+  $('wall-file').addEventListener('change', function () {
+    var f = this.files && this.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try { var n = addGeoJSON(JSON.parse(rd.result), 'drawn', false); saveLines(); barrChanged(); $('barr-msg').textContent = n ? 'Loaded ' + n + ' line(s) from the file.' : 'No lines found in that file.'; }
+      catch (e) { $('barr-msg').textContent = 'That file could not be read as GeoJSON.'; }
+    };
+    rd.readAsText(f); this.value = '';
+  });
+  // Saved lines from this browser, then any walls.geojson that sits next to the page (those go first)
+  (function () {
+    try { (JSON.parse(localStorage.getItem('tfm_lines') || '[]')).forEach(function (l) { if (l && l.ll && isFinite(l.ft)) barr.lines.push({ ll: l.ll, ft: l.ft, src: 'drawn' }); }); } catch (e) {}
+    renderBarrList(); drawBarr();
+    fetch('walls.geojson', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (gj) {
+      if (gj && addGeoJSON(gj, 'file', true)) barrChanged();
+    }).catch(function () {});
+  })();
 
-  function buildEff(seeds) {
-    var key = JSON.stringify([
-      barr.walls.map(function (w) { return [w.b.getSouth(), w.b.getWest(), w.b.getNorth(), w.b.getEast(), w.ft]; }),
-      barr.opens.map(function (o) { return [o.ll[0], o.ll[1], o.ft]; }), SCALE_GAP, seeds]);
+  function buildEff() {
+    var key = JSON.stringify([barr.on, barr.lines.map(function (l) { return [l.ft, l.ll]; }), SCALE_GAP, conn.token]);
     if (conn.effKey === key) return;
-    conn.effKey = key; conn.effNote = '';
-    if (!barr.walls.length || !seeds.length) { conn.eff = null; return; }
-    var g = conn.grid, w = conn.w, h = conn.h, N = w * h, q = conn.q, i, j, x, y, s;
-    var zs = -1e9;
-    for (s = 0; s < seeds.length; s++) if (g[seeds[s]] > zs) zs = g[seeds[s]];
-    var body = conn.body || (conn.body = new Uint8Array(N));
-    var nBody = floodFill(g, w, h, seeds, zs + 0.15, body, q);       // the water surface in the data
-    if (nBody > 0.6 * N) { conn.eff = null; conn.effNote = ' Known barriers were skipped because the water area looked too large. Check the water sources.'; return; }
-    var band = conn.band || (conn.band = new Uint8Array(N)); band.fill(0);
-    var k = Math.max(2, Math.ceil(3 / conn.res)), qh = 0, qt = 0;
-    for (i = 0; i < N; i++) {
-      if (!body[i]) continue; x = i % w;
-      if ((x > 0 && !body[i - 1]) || (x < w - 1 && !body[i + 1]) || (i >= w && !body[i - w]) || (i < N - w && !body[i + w])) q[qt++] = i;
-    }
-    for (var step = 0; step < k; step++) {
-      var end = qt;
-      while (qh < end) {
-        i = q[qh++]; x = i % w;
-        if (x > 0)     { j = i - 1; if (!body[j] && !band[j]) { band[j] = 1; q[qt++] = j; } }
-        if (x < w - 1) { j = i + 1; if (!body[j] && !band[j]) { band[j] = 1; q[qt++] = j; } }
-        if (i >= w)    { j = i - w; if (!body[j] && !band[j]) { band[j] = 1; q[qt++] = j; } }
-        if (i < N - w) { j = i + w; if (!body[j] && !band[j]) { band[j] = 1; q[qt++] = j; } }
+    conn.effKey = key; conn.raised = 0; conn.eff = null;
+    if (!barr.on || !barr.lines.length) return;
+    var g = conn.grid, w = conn.w, h = conn.h, N = w * h, i, k, t;
+    var H = conn.hBuf || (conn.hBuf = new Float32Array(N)); H.fill(-1e9);
+    function stamp(x, y, hm) { if (x >= 0 && y >= 0 && x < w && y < h) H[y * w + x] = hm; }
+    barr.lines.forEach(function (l) {
+      var hm = (l.ft - SCALE_GAP) * FT, pp = l.ll.map(ptToPx);
+      for (k = 0; k + 1 < pp.length; k++) {
+        var dx = pp[k + 1][0] - pp[k][0], dy = pp[k + 1][1] - pp[k][1], steps = Math.max(1, Math.ceil(Math.sqrt(dx * dx + dy * dy) * 2));
+        for (t = 0; t <= steps; t++) {
+          var cx = Math.floor(pp[k][0] + dx * t / steps), cy = Math.floor(pp[k][1] + dy * t / steps);
+          stamp(cx, cy, hm); stamp(cx - 1, cy, hm); stamp(cx + 1, cy, hm); stamp(cx, cy - 1, hm); stamp(cx, cy + 1, hm);
+        }
       }
-    }
+    });
     var eff = conn.effBuf || (conn.effBuf = new Float32Array(N)); eff.set(g);
-    barr.walls.forEach(function (wl) {
-      var wallM = (wl.ft - SCALE_GAP) * FT;
-      var a = ptToPx([wl.b.getSouth(), wl.b.getWest()]), b = ptToPx([wl.b.getNorth(), wl.b.getEast()]);
-      var x0 = Math.max(0, Math.floor(Math.min(a[0], b[0]))), x1 = Math.min(w - 1, Math.ceil(Math.max(a[0], b[0])));
-      var y0 = Math.max(0, Math.floor(Math.min(a[1], b[1]))), y1 = Math.min(h - 1, Math.ceil(Math.max(a[1], b[1])));
-      for (y = y0; y <= y1; y++) for (x = x0; x <= x1; x++) { i = y * w + x; if (band[i] && eff[i] < wallM) eff[i] = wallM; }
-    });
-    barr.opens.forEach(function (o) {
-      var openM = (o.ft - SCALE_GAP) * FT, p = ptToPx(o.ll), r = Math.max(2, Math.ceil(5 / conn.res));
-      var cx = Math.floor(p[0]), cy = Math.floor(p[1]);
-      for (y = cy - r; y <= cy + r; y++) for (x = cx - r; x <= cx + r; x++) {
-        if (x < 0 || y < 0 || x >= w || y >= h || (x - cx) * (x - cx) + (y - cy) * (y - cy) > r * r) continue;
-        i = y * w + x;
-        if (band[i] && eff[i] > g[i]) eff[i] = Math.max(g[i], openM);   // only cells the wall raised
-      }
-    });
-    conn.eff = eff;
+    var raised = 0, z;
+    for (i = 0; i < N; i++) {
+      if (H[i] <= -1e8) continue;
+      z = eff[i];
+      if (!(z === z && z >= -500 && z < 9000) || z < H[i]) { eff[i] = H[i]; raised++; }
+    }
+    conn.eff = eff; conn.raised = raised;
   }
 
   /* ---- Results ---- */
