@@ -100,6 +100,8 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--water); out
 .row2 label { display: block; margin-bottom: 4px; }
 #barr-list { display: grid; gap: 6px; margin-top: 8px; font-size: 13px; }
 #barr-list .inline { justify-content: space-between; }
+.adv { margin: 4px 0 8px; border-top: 1px solid var(--line); padding-top: 10px; color: var(--muted); }
+.adv summary { cursor: pointer; font-size: 13px; min-height: 30px; }
 .drawbar { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 80px); }
 .drawbar .btn { background: var(--panel); box-shadow: 0 1px 5px rgba(0,0,0,.4); }
 .hrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -343,22 +345,16 @@ section > .hrow { margin-bottom: 8px; }
         <div><span class="sw" style="background:var(--water)"></span><span id="lg-blue">Under water at the forecast tide</span></div>
         <div><span class="sw" style="background:var(--surge)"></span><span id="lg-orange">Under water if the water runs higher than forecast (step 3)</span></div>
         <div><span class="sw" style="background:var(--worse)"></span><span id="lg-red">Under water in the worse case (step 3)</span></div>
+        <div id="lg-barrier-row" hidden><span class="sw" style="background:#7b3fe4;height:3px;align-self:center"></span><span>Purple line: a barrier you know about, at the height you entered</span></div>
         <div id="lg-none-row"><span class="sw" style="background:transparent;border:1px dashed var(--muted,#888)"></span><span id="lg-none">No color: the water does not reach it</span></div>
       </div>
       <div class="field" style="margin-top:10px">
-        <div class="hrow"><label>Where the water starts</label><button class="info" type="button" data-info="sources" aria-expanded="false" aria-label="More about water sources">i</button></div>
-        <div class="inline">
-          <button class="btn" id="seed-add" type="button">Add a source on the map</button>
-          <button class="btn" id="seed-clear" type="button">Clear mine</button>
-        </div>
-        <p class="hint" id="seed-msg">The harbor entrance tide station is the starting point. If part of the harbor water isn't blue, press the button, then click that water.</p>
-      </div>
-      <div class="field" style="margin-top:10px">
-        <div class="hrow"><label>Known walls (optional)</label><button class="info" type="button" data-info="known" aria-expanded="false" aria-label="More about known walls">i</button></div>
-        <label class="inline" style="gap:8px;margin:2px 0 6px"><input type="checkbox" id="walls-on" checked> Use the walls below</label>
+        <div class="hrow"><label>Known barriers (optional)</label><button class="info" type="button" data-info="known" aria-expanded="false" aria-label="More about known barriers">i</button></div>
+        <p class="hint" style="margin:0 0 6px">Do you know of a barrier, such as sandbags, a berm or a seawall? Draw a line along it and enter your best estimate of its height. The map then treats it as holding the water back up to that height.</p>
+        <label class="inline" style="gap:8px;margin:2px 0 6px;justify-content:flex-start;color:var(--ink);font-size:14px"><input type="checkbox" id="walls-on" checked style="width:22px;height:22px;flex:none"> Use the barriers below</label>
         <div class="row2">
-          <div><label for="wall-ft">Height of the next line</label><div class="inline"><input id="wall-ft" type="number" step="0.1" value="7.6"><span class="unit">ft</span></div></div>
-          <div><label>&nbsp;</label><button class="btn" id="wall-draw" type="button">Draw a wall line</button></div>
+          <div><label for="wall-ft">Barrier height</label><div class="inline"><input id="wall-ft" type="number" step="0.1" value="7.6"><span class="unit">ft</span></div></div>
+          <div><label>&nbsp;</label><button class="btn" id="wall-draw" type="button">Draw a barrier line</button></div>
         </div>
         <div id="barr-list"></div>
         <div class="inline" style="margin-top:8px;flex-wrap:wrap">
@@ -367,7 +363,7 @@ section > .hrow { margin-bottom: 8px; }
           <button class="btn" id="barr-clear" type="button">Clear all</button>
           <input type="file" id="wall-file" accept=".geojson,.json,application/geo+json,application/json" hidden>
         </div>
-        <p class="hint" id="barr-msg">The elevation data can miss thin seawalls. Draw a line along a wall and give it a height. Heights are in feet on the tide-table scale. Works only when "Barriers hold" is selected.</p>
+        <p class="hint" id="barr-msg">The elevation data can miss thin walls and cannot see sandbags. Heights are in feet, on the same scale as the tide forecast. Works only when "Barriers hold" is selected.</p>
       </div>
       <div class="field" style="margin-top:10px"><label for="op">Overlay opacity</label><input id="op" type="range" min="20" max="100" value="60"></div>
       <div id="status">Loading flood layer…</div>
@@ -379,11 +375,22 @@ section > .hrow { margin-bottom: 8px; }
       <ul>
         <li>Ground heights come from a lidar model and can be off by a few inches. Treat anything within a foot as uncertain.</li>
         <li>With "Barriers hold" selected, water spreads from the harbor only over ground lower than the water level, so walled-off low spots get no color. The map is built from cells about 1 to 2 meters wide, so a thin wall or a narrow gap can be missed either way. No color does not mean safe. Choose "Barriers fail or are bypassed" to see everything that is low.</li>
-        <li>Walls you draw or load under "Known walls" are your assumptions, not measurements. A wall set too high can hide real flooding, so say so when you share a result.</li>
-        <li>Storm drains, tidal valves, pumps, sandbags and berms are not included. Drain backup can flood streets below the harbor level.</li>
+        <li>Barriers you draw or load under "Known barriers" are your assumptions, not measurements. A barrier set too high can hide real flooding, so say so when you share a result.</li>
+        <li>Storm drains, tidal valves and pumps are not included. Sandbags and berms count only if you add them under "Known barriers". Drain backup can flood streets below the harbor level.</li>
         <li>The 22-inch figure is the City's illustration. Actual water has run 18 to 22 inches or more above forecast.</li>
       </ul>
     </section>
+  <details class="adv" id="adv">
+    <summary>Advanced: part of the harbor has no color?</summary>
+    <div class="field" style="margin-top:8px">
+      <div class="hrow"><label>Tell the map where the water is</label><button class="info" type="button" data-info="sources" aria-expanded="false" aria-label="More about water sources">i</button></div>
+      <p class="hint" id="seed-msg">The map spreads the water outward from the harbor, so it needs a starting point, and it finds one by itself. You only need this if part of the harbor water has no color when it should. Press the button, then tap that water on the map. This is rarely needed.</p>
+      <div class="inline">
+        <button class="btn" id="seed-add" type="button">Add a source on the map</button>
+        <button class="btn" id="seed-clear" type="button">Clear mine</button>
+      </div>
+    </div>
+  </details>
   </aside>
   <div id="map" role="application" aria-label="Flood map"></div>
 </div>
@@ -731,8 +738,8 @@ section > .hrow { margin-bottom: 8px; }
     buildEff(); g = conn.eff || conn.grid;
     if (barr.lines.length && barr.on && !barr.placing) {
       $('barr-msg').textContent = conn.raised > 0
-        ? 'Walls applied: ' + barr.lines.length + ' line(s), ' + conn.raised + ' cells raised or blocked (about ' + Math.round(conn.raised * conn.res) + ' m of wall). Heights are on the tide-table scale.'
-        : 'Nothing changed: your lines lie outside the computed area, or the ground under them is already higher than the wall height.';
+        ? 'Barriers applied: ' + barr.lines.length + ' line(s), about ' + Math.round(conn.raised * conn.res) + ' m of barrier. Heights are on the tide-forecast scale.'
+        : 'Nothing changed: your lines lie outside the computed area, or the ground under them is already higher than the barrier height.';
     }
     if (!conn.outline) conn.outline = L.rectangle(conn.bounds, { color: '#ffffff', weight: 1.5, dashArray: '5 5', fill: false, interactive: false }).addTo(map);
     floodFill(g, w, h, seeds, lvW, conn.rW, conn.q);
@@ -756,9 +763,9 @@ section > .hrow { margin-bottom: 8px; }
     var nUser = conn.userSeeds.length;
     setStatus(seeds.length
       ? 'Barriers hold. Cells are about ' + conn.res.toFixed(1) + ' m wide. Water sources: ' + seeds.length + (nUser ? ' (' + nUser + ' added by you)' : '') + '. The dashed outline marks the area computed.'
-        + (nS < 0.002 * N ? ' WARNING: the water spread from its starting point covers almost nothing, so it probably started on land. Press "Add a source on the map" and click the harbor water.' : '')
-        + (conn.eff ? ' Wall lines applied: ' + barr.lines.length + '.' : '')
-      : 'No water source found in this area. Use "Add a source on the map" and click the harbor.');
+        + (nS < 0.002 * N ? ' WARNING: the water spread from its starting point covers almost nothing, so it probably started on land. Open "Advanced" at the bottom of the page, press "Add a source on the map" and tap the harbor water.' : '')
+        + (conn.eff ? ' Barrier lines applied: ' + barr.lines.length + '.' : '')
+      : 'No water source found in this area. Open "Advanced" at the bottom of the page, press "Add a source on the map" and tap the harbor water.');
     updateResults();
   }
   function refreshOverlays() {
@@ -791,8 +798,8 @@ section > .hrow { margin-bottom: 8px; }
     $('lg-red').textContent = 'Under water in the worse case (step 3)';
     $('lg-none').textContent = conn.on ? 'No color: the water does not reach it' : 'No color: the ground is higher than the water, so it stays dry';
     $('lg-mode').textContent = conn.on
-      ? 'Showing ground the water can reach over the land from the harbor. Walls and higher ground can block it.'
-      : 'Showing every spot that is lower than the water, even if a wall or higher ground would block the water from getting there.';
+      ? 'Showing ground the water can reach over the land from the harbor. Barriers and higher ground can block it.'
+      : 'Showing every spot that is lower than the water, even if a barrier or higher ground would block the water from getting there.';
   }
   Array.prototype.forEach.call($('barrier-mode').children, function (b) {
     b.addEventListener('click', function () {
@@ -856,20 +863,20 @@ section > .hrow { margin-bottom: 8px; }
        <li><b>Water can reach your spot</b>: whether the water has a way onto your ground over the surface. See the map colors.</li></ul>` },
     sources: { t: 'Where the water starts', h:
       `<p>The map needs to know where the water is, so it can spread from there. It starts from the harbor entrance tide station automatically.</p>
-       <p>If part of the harbor water is not blue, or the shading looks wrong, press "Add a source on the map" and click that water. You can add several. "Clear mine" removes the ones you added.</p>` },
+       <p>If part of the harbor water has no color, or the shading looks wrong, open "Advanced" at the bottom of the page, press "Add a source on the map" and tap that water. You can add several. "Clear mine" removes the ones you added.</p>` },
     live: { t: 'Live conditions', h:
       `<p>What is happening right now, as measured by instruments.</p>
        <ul><li><b>Water above prediction</b>: how far the real water is from what the tide table said. A plus sign means the water is running high. The 24-hour average smooths out short ups and downs. It is measured in Los Angeles, about 23 miles away, so it is a close guide but not exact.</li>
        <li><b>Wind from</b>: the direction the wind comes from. "Onshore" means it blows from the ocean toward the coast, which pushes water and waves toward land. Inside the harbor, waves stay small.</li>
        <li><b>Pressure</b>: low air pressure lets the sea rise slightly. The effect is small, a few inches in a typical storm.</li>
        <li><b>Weather alerts</b>: official alerts for your spot from the National Weather Service. The "Likely effect" note under each one is a general rule of thumb from this tool, not from the weather service. Open "Read the full statement" for the official words.</li></ul>` },
-    known: { t: 'Known walls', h:
-      `<p>The elevation data often misses thin seawalls, so the map can let water in where a real wall would stop it. Here you can draw the walls yourself.</p>
-       <ul><li><b>Draw a wall line</b>: set the height, press the button, then click along the top of the wall, point by point. Zoom in first. Press "Finish line" when you are done.</li>
-       <li><b>Openings</b>: a gap in a wall, such as a ferry approach or a boat ramp, is a short line drawn <i>after</i> the main wall, with its own lower height. A line listed later overrides one listed earlier where they cross.</li>
+    known: { t: 'Known barriers', h:
+      `<p>Water flows around and over whatever is in its way. The elevation data often misses thin walls, and it cannot see sandbags added this week. If you know of a barrier, you can tell the map about it.</p>
+       <ul><li><b>Draw a barrier line</b>: enter its estimated height, press the button, then tap along the barrier, point by point. Zoom in first. Press "Finish line" when you are done. The line is drawn in purple.</li>
+       <li><b>Gaps</b>: a gap in a barrier, such as a ferry approach or a boat ramp, is a short line drawn <i>after</i> the main barrier, with its own lower height. A line listed later overrides one listed earlier where they cross.</li>
        <li><b>Save as file</b>: downloads walls.geojson. Put that file next to index.html on GitHub and the page loads it for everyone, including on a phone. "Load a file" brings in a GeoJSON made elsewhere, for example in ArcGIS.</li></ul>
-       <p>Heights are in feet on the same scale as the tide table. The City's older reports for Balboa Island list wall tops of 7.6 to 8.7 ft, and the lowest openings at 6.8 ft (ferry approach), 7.2 ft (launch ramp) and 7.5 ft (Collins Island bridge). Check them against what you see.</p>
-       <p>A line never lowers ground that is already higher. These are your assumptions, not measurements. A wall set too high can hide real flooding, so say so if you share a result.</p>` }
+       <p>Heights are in feet on the same scale as the tide forecast. The City's older reports for Balboa Island list wall tops of 7.6 to 8.7 ft, and the lowest openings at 6.8 ft (ferry approach), 7.2 ft (launch ramp) and 7.5 ft (Collins Island bridge). Check them against what you see.</p>
+       <p>A line never lowers ground that is already higher. These are your assumptions, not measurements. A barrier set too high can hide real flooding, so say so if you share a result.</p>` }
   };
   Array.prototype.forEach.call(document.querySelectorAll('.info'), function (b) {
     b.addEventListener('click', function () {
@@ -919,15 +926,15 @@ section > .hrow { margin-bottom: 8px; }
   }
   function toGeoJSON() {
     return { type: 'FeatureCollection', features: barr.lines.map(function (l, i) {
-      return { type: 'Feature', properties: { name: 'Wall ' + (i + 1), height_ft: l.ft }, geometry: { type: 'LineString', coordinates: l.ll.map(function (p) { return [+p[1].toFixed(7), +p[0].toFixed(7)]; }) } };
+      return { type: 'Feature', properties: { name: 'Barrier ' + (i + 1), height_ft: l.ft }, geometry: { type: 'LineString', coordinates: l.ll.map(function (p) { return [+p[1].toFixed(7), +p[0].toFixed(7)]; }) } };
     }) };
   }
   function renderBarrList() {
     var box = $('barr-list'); box.innerHTML = '';
     barr.lines.forEach(function (l, i) {
       var d = document.createElement('div'); d.className = 'inline';
-      var t = document.createElement('span'); t.textContent = 'Line ' + (i + 1) + (l.src === 'file' ? ' (from file)' : '') + ':'; d.appendChild(t);
-      var inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.1'; inp.value = l.ft; inp.style.maxWidth = '84px'; inp.setAttribute('aria-label', 'Height of line ' + (i + 1) + ' in feet');
+      var t = document.createElement('span'); t.textContent = 'Barrier ' + (i + 1) + (l.src === 'file' ? ' (from file)' : '') + ':'; d.appendChild(t);
+      var inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.1'; inp.value = l.ft; inp.style.maxWidth = '84px'; inp.setAttribute('aria-label', 'Height of barrier ' + (i + 1) + ' in feet');
       inp.addEventListener('change', function () { var v = parseFloat(inp.value); if (isFinite(v)) { l.ft = v; saveLines(); barrChanged(true); } });
       d.appendChild(inp);
       var u = document.createElement('span'); u.textContent = 'ft'; d.appendChild(u);
@@ -938,9 +945,10 @@ section > .hrow { margin-bottom: 8px; }
   }
   function drawBarr() {
     barr.layer.clearLayers();
+    $('lg-barrier-row').hidden = !(barr.on && barr.lines.length);
     if (!barr.on) return;
     barr.lines.forEach(function (l, i) {
-      L.polyline(l.ll, { color: '#ffb000', weight: 4, opacity: 0.95, interactive: true }).bindTooltip('Line ' + (i + 1) + ': ' + l.ft.toFixed(1) + ' ft', { sticky: true }).addTo(barr.layer);
+      L.polyline(l.ll, { color: '#7b3fe4', weight: 2.5, opacity: 0.95, interactive: true }).bindTooltip('Barrier ' + (i + 1) + ': ' + l.ft.toFixed(1) + ' ft', { sticky: true }).addTo(barr.layer);
     });
   }
   function barrChanged(skipList) { if (!skipList) renderBarrList(); drawBarr(); schedule(); }
@@ -957,20 +965,20 @@ section > .hrow { margin-bottom: 8px; }
   function refreshPreview() {
     barr.vmarks.clearLayers();
     if (barr.preview) { map.removeLayer(barr.preview); barr.preview = null; }
-    barr.pts.forEach(function (p) { L.circleMarker(p, { radius: 5, color: '#fff', weight: 2, fillColor: '#ffb000', fillOpacity: 1, interactive: false }).addTo(barr.vmarks); });
-    if (barr.pts.length > 1) barr.preview = L.polyline(barr.pts, { color: '#ffb000', weight: 3, dashArray: '6 5', interactive: false }).addTo(map);
+    barr.pts.forEach(function (p) { L.circleMarker(p, { radius: 5, color: '#fff', weight: 2, fillColor: '#7b3fe4', fillOpacity: 1, interactive: false }).addTo(barr.vmarks); });
+    if (barr.pts.length > 1) barr.preview = L.polyline(barr.pts, { color: '#7b3fe4', weight: 2.5, dashArray: '6 5', interactive: false }).addTo(map);
   }
   function setBarrPlacing(p, msg) {
     barr.placing = p; barr.pts = []; refreshPreview();
     if (p) { conn.placing = false; $('seed-add').textContent = 'Add a source on the map'; map.doubleClickZoom.disable(); } else map.doubleClickZoom.enable();
     if (drawEl) drawEl.style.display = p ? 'flex' : 'none';
-    $('wall-draw').textContent = p ? 'Stop drawing' : 'Draw a wall line';
-    $('barr-msg').textContent = msg || (p ? 'Click along the wall, point by point. Zoom in for accuracy. Press Finish line when done.' : 'The elevation data can miss thin seawalls. Draw a line along a wall and give it a height. Heights are in feet on the tide-table scale. Works only when "Barriers hold" is selected.');
+    $('wall-draw').textContent = p ? 'Stop drawing' : 'Draw a barrier line';
+    $('barr-msg').textContent = msg || (p ? 'Tap along the barrier, point by point. Zoom in for accuracy. Press Finish line when done.' : 'The elevation data can miss thin walls and cannot see sandbags. Heights are in feet, on the same scale as the tide forecast. Works only when "Barriers hold" is selected.');
     map.getContainer().style.cursor = p ? 'crosshair' : '';
   }
   function undoPoint() { barr.pts.pop(); refreshPreview(); }
   function finishLine() {
-    if (barr.pts.length < 2) { $('barr-msg').textContent = 'A line needs at least two points. Keep clicking along the wall.'; return; }
+    if (barr.pts.length < 2) { $('barr-msg').textContent = 'A line needs at least two points. Keep tapping along the barrier.'; return; }
     var ft = parseFloat($('wall-ft').value); if (!isFinite(ft)) ft = DEFAULT_WALL_FT;
     barr.lines.push({ ll: barr.pts.map(function (p) { return [p.lat, p.lng]; }), ft: ft, src: 'drawn' });
     saveLines(); setBarrPlacing(null); barrChanged();
@@ -987,7 +995,7 @@ section > .hrow { margin-bottom: 8px; }
     var a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(toGeoJSON(), null, 1)], { type: 'application/geo+json' }));
     a.download = 'walls.geojson'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    $('barr-msg').textContent = 'Saved walls.geojson. Put it in the same folder as index.html on GitHub and every visitor will get these walls.';
+    $('barr-msg').textContent = 'Saved walls.geojson. Put it in the same folder as index.html on GitHub and every visitor will get these barriers.';
   });
   $('wall-load').addEventListener('click', function () { $('wall-file').click(); });
   $('wall-file').addEventListener('change', function () {
