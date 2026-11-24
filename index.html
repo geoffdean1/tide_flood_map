@@ -115,6 +115,10 @@ section > .hrow { margin-bottom: 8px; }
 .infobox p:last-child { margin-bottom: 0; }
 .infobox ul { margin: 4px 0 6px; padding-left: 18px; }
 .infobox li { margin-bottom: 3px; }
+.xu { display: inline-grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: none; }
+.xu button { border: 0; border-right: 1px solid var(--line); background: var(--chip); color: var(--ink); padding: 4px 14px; min-height: 32px; font: 13px var(--font); cursor: pointer; }
+.xu button:last-child { border-right: 0; }
+.xu button[aria-pressed="true"] { background: var(--water); color: #fff; }
 .stn { width: 14px; height: 14px; background: #ffd400; border: 2px solid #12222e; transform: rotate(45deg); box-shadow: 0 0 0 1.5px #fff; }
 .mstrip { display: none; }
 .quick { display: none; }
@@ -154,9 +158,11 @@ section > .hrow { margin-bottom: 8px; }
   .qstep button { min-height: 44px; font-size: 26px; line-height: 1; border-radius: 10px; border: 1px solid var(--line); background: var(--chip, var(--bg)); color: var(--ink); touch-action: manipulation; -webkit-user-select: none; user-select: none; }
   .qstep input { text-align: center; font-size: 22px; font-weight: 700; min-height: 44px; }
   .qsrc { font-size: 11.5px; color: var(--muted); text-align: right; line-height: 1.25; max-width: 62%; }
+  .qcard .qsrc { max-width: none; text-align: left; margin: -2px 0 6px; }
+  .xu button { min-height: 36px; padding: 4px 16px; font-size: 14px; }
   .qnum { position: relative; }
   .qnum span { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; pointer-events: none; }
-  .qchips { display: flex; gap: 6px; margin-top: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .qchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; padding-bottom: 2px; }
   .qc { flex: 1 1 auto; min-height: 34px; padding: 6px 6px; white-space: nowrap; border-radius: 999px; border: 1px solid var(--line); background: var(--chip, #eef2f4); color: var(--ink); font: 13px var(--font); touch-action: manipulation; }
   .qc[aria-pressed="true"] { background: var(--water); border-color: var(--water); color: #fff; }
   .qc:disabled { opacity: .45; }
@@ -187,10 +193,11 @@ section > .hrow { margin-bottom: 8px; }
         <div class="qpane" id="qp-type" hidden><div class="hero-input"><input id="q-tide-in" type="number" step="0.1" inputmode="decimal" aria-label="Tide height in feet"><span>ft</span></div></div>
       </div>
       <div class="qcard">
-        <div class="qhead"><span class="qlabel">Extra water</span><span class="qsrc" id="q-extra-src"></span></div>
+        <div class="qhead"><span class="qlabel">Extra water</span><div class="xu" role="group" aria-label="Units for extra water"><button type="button" data-xu="in" aria-pressed="true">Inches</button><button type="button" data-xu="ft" aria-pressed="false">Feet</button></div></div>
+        <div class="qsrc" id="q-extra-src"></div>
         <div class="qstep">
           <button type="button" id="q-minus" aria-label="One inch less">−</button>
-          <div class="qnum"><input id="q-extra-in" type="number" step="1" min="0" inputmode="numeric" aria-label="Extra water in inches"><span>in</span></div>
+          <div class="qnum"><input id="q-extra-in" type="number" step="1" min="0" inputmode="numeric" aria-label="Extra water in inches"><span id="q-extra-unit">in</span></div>
           <button type="button" id="q-plus" aria-label="One inch more">+</button>
         </div>
         <div class="qchips" id="q-extra-chips">
@@ -264,18 +271,19 @@ section > .hrow { margin-bottom: 8px; }
 
     <section class="desk-only">
       <h2>3. Extra water</h2>
+      <div class="field"><div class="hrow"><label>Show extra water in</label><div class="xu" role="group" aria-label="Units for extra water"><button type="button" data-xu="in" aria-pressed="true">Inches</button><button type="button" data-xu="ft" aria-pressed="false">Feet</button></div></div></div>
       <div class="field">
         <div class="hrow"><label>How much higher than forecast is the water running?</label><button class="info" type="button" data-info="extra" aria-expanded="false" aria-label="More about extra water">i</button></div>
         <div class="seg" id="mode">
-          <button type="button" data-mode="none" aria-pressed="false">Not at all<small>0 in</small></button>
-          <button type="button" data-mode="city" aria-pressed="true">City's estimate<small>+22 in</small></button>
+          <button type="button" data-mode="none" aria-pressed="false">Not at all<small id="m-none-sm">0 in</small></button>
+          <button type="button" data-mode="city" aria-pressed="true">City's estimate<small id="m-city-sm">+22 in</small></button>
           <button type="button" data-mode="custom" aria-pressed="false">My own<small>set below</small></button>
         </div>
-        <p class="hint">The City reports water recently running about 22 inches above forecast.</p>
+        <p class="hint" id="city-hint">The City reports water recently running about 22 inches above forecast.</p>
       </div>
       <div class="field">
         <label for="extra-in">Your own amount</label>
-        <div class="inline"><input id="extra-in" type="number" step="1" min="0" value="22"><span class="unit">inches</span></div>
+        <div class="inline"><input id="extra-in" type="number" step="1" min="0" value="22"><span class="unit" id="extra-unit">inches</span></div>
       </div>
       <div class="field">
         <div class="inline"><button class="btn" id="apply" type="button" disabled>Use the live 24 h average</button><button class="btn" id="apply-max" type="button" disabled>Use the live highest hour</button></div>
@@ -283,7 +291,7 @@ section > .hrow { margin-bottom: 8px; }
       </div>
       <div class="field">
         <div class="hrow"><label for="whatif">Also test a worse case: water even higher by</label><button class="info" type="button" data-info="worse" aria-expanded="false" aria-label="More about the worse case">i</button></div>
-        <div class="inline"><input id="whatif" type="number" step="1" min="0" value="0"><span class="unit">inches</span></div>
+        <div class="inline"><input id="whatif" type="number" step="1" min="0" value="0"><span class="unit" id="what-unit">inches</span></div>
         <div class="seg" data-wi="1" style="margin-top:6px">
           <button type="button" data-w="0" aria-pressed="true">None</button>
           <button type="button" data-w="12" aria-pressed="false">+12 in</button>
@@ -377,7 +385,7 @@ section > .hrow { margin-bottom: 8px; }
         <li>With "Barriers hold" selected, water spreads from the harbor only over ground lower than the water level, so walled-off low spots get no color. The map is built from cells about 1 to 2 meters wide, so a thin wall or a narrow gap can be missed either way. No color does not mean safe. Choose "Barriers fail or are bypassed" to see everything that is low.</li>
         <li>Barriers you draw or load under "Known barriers" are your assumptions, not measurements. A barrier set too high can hide real flooding, so say so when you share a result.</li>
         <li>Storm drains, tidal valves and pumps are not included. Sandbags and berms count only if you add them under "Known barriers". Drain backup can flood streets below the harbor level.</li>
-        <li>The 22-inch figure is the City's illustration. Actual water has run 18 to 22 inches or more above forecast.</li>
+        <li>The 22-inch (1.8 ft) figure is the City's illustration. Actual water has run 18 to 22 inches (1.5 to 1.8 ft) or more above forecast.</li>
       </ul>
     </section>
   <details class="adv" id="adv">
@@ -432,6 +440,16 @@ section > .hrow { margin-bottom: 8px; }
   var mode = 'city';
   var groundFt = null;            // ground height on the tide-table scale, ft
   var anomalyAvgFt = null;
+  /* Extra water is kept in inches internally. The Inches / Feet switch only changes how it is shown and typed. */
+  var xunit = 'in', customIn = 22, whatIn = 0, liveAvgIn = null, liveMaxIn = null;
+  try { if (localStorage.getItem('tfm_xunit') === 'ft') xunit = 'ft'; } catch (e) {}
+  function toIn(v) { return xunit === 'ft' ? v * 12 : v; }
+  function fmtNum(inches) {           // the number only, in the chosen unit
+    if (xunit !== 'ft') return String(Math.round(inches));
+    var f = inches / 12, t = Math.round(f * 10) / 10;
+    return Math.abs(f - t) < 0.005 ? t.toFixed(1) : f.toFixed(2);
+  }
+  function fmtX(inches) { return fmtNum(inches) + (xunit === 'ft' ? ' ft' : ' in'); }
 
   var map = L.map('map').setView(home, startZoom);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -449,8 +467,8 @@ section > .hrow { margin-bottom: 8px; }
 
   function levels() {
     var tide = parseFloat($('tide').value) || 0;
-    var extraIn = mode === 'none' ? 0 : mode === 'city' ? 22 : (parseFloat($('extra-in').value) || 0);
-    var whatifIn = parseFloat($('whatif').value) || 0;
+    var extraIn = mode === 'none' ? 0 : mode === 'city' ? 22 : customIn;
+    var whatifIn = whatIn;
     var water = tide + extraIn / 12;
     return { tide: tide, water: water, worse: water + whatifIn / 12 };
   }
@@ -848,11 +866,11 @@ section > .hrow { margin-bottom: 8px; }
        <p>The City reports that water has recently been running about 22 inches (nearly 2 feet) above the tide tables. This tool adds that extra to the forecast so you can see what could really happen.</p>
        <ul><li><b>Not at all</b>: the forecast as printed.</li>
        <li><b>City's estimate</b>: adds 22 inches.</li>
-       <li><b>My own</b>: you choose the number of inches.</li></ul>
+       <li><b>My own</b>: you choose the amount, in inches or in decimal feet. Use the Inches / Feet switch.</li></ul>
        <p>The live buttons measure the extra from NOAA's readings at Los Angeles, the nearest station that reports live water level, which is about 35 miles up the coast. "Live average" averages the last 24 hours, so it includes low tides and quiet hours. "Live highest" is the highest one-hour average in those 24 hours, which is closer to what a high tide brings. The page starts with the highest-hour number when it can get it, and with the City's 22 inches when it cannot.</p>
        <p>"Storm margin" adds more water on top, to test a worse case such as a storm.</p>` },
     worse: { t: 'What is the worse case?', h:
-      `<p>A cushion for the unexpected. Enter how many more inches of water you want to test on top of everything above. A storm can push the water higher still, with wind blowing toward the coast and low air pressure. That rise is called storm surge.</p>
+      `<p>A cushion for the unexpected. Enter how much more water you want to test on top of everything above, in inches or decimal feet. A storm can push the water higher still, with wind blowing toward the coast and low air pressure. That rise is called storm surge.</p>
        <p>Ground that floods only because of this extra amount turns red. Leave it at 0 to switch the worse case off.</p>` },
     levels: { t: 'Reading the result', h:
       `<p>All heights are in feet on the same scale as the tide table you see in the news, so you can compare them directly.</p>
@@ -1288,12 +1306,14 @@ section > .hrow { margin-bottom: 8px; }
   function syncQuick() {
     var v = levels();
     $('q-tide-val').textContent = v.tide.toFixed(1) + ' ft';
-    var inch = Math.round((v.water - v.tide) * 12);
+    var effIn = (v.water - v.tide) * 12;
     $('q-extra-src').textContent = 'Using: ' + (SRC_TEXT[extraSource] || '') + (extraSource === 'avg' || extraSource === 'max' ? ' (NOAA LA)' : '');
     Array.prototype.forEach.call($('q-extra-chips').children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-x') === extraSource ? 'true' : 'false'); });
     var wi = Math.round((v.worse - v.water) * 12);
     Array.prototype.forEach.call(document.querySelectorAll('[data-wi] button'), function (b) { b.setAttribute('aria-pressed', +b.getAttribute('data-w') === wi ? 'true' : 'false'); });
-    if (document.activeElement !== $('q-extra-in')) $('q-extra-in').value = inch;
+    if (document.activeElement !== $('q-extra-in')) $('q-extra-in').value = fmtNum(effIn);
+    if (document.activeElement !== $('extra-in')) $('extra-in').value = fmtNum(customIn);
+    if (document.activeElement !== $('whatif')) $('whatif').value = fmtNum(whatIn);
     if (document.activeElement !== $('q-tide-in')) $('q-tide-in').value = v.tide.toFixed(1);
   }
   var sheetFrom = null, sheetPicked = false;
@@ -1332,13 +1352,15 @@ section > .hrow { margin-bottom: 8px; }
   Array.prototype.forEach.call($('q-tabs').children, function (b) { b.addEventListener('click', function () { var t = b.getAttribute('data-t'); if (t === 'high') sheetFrom = qTab; setQTab(t); }); });
   $('q-tide-in').addEventListener('input', function () { if (this.value !== '') { $('tide').value = this.value; $('tide').dispatchEvent(new Event('input')); } });
   function stepExtra(d) {
-    var cur = Math.round((levels().water - levels().tide) * 12), v = Math.max(0, cur + d);
-    $('extra-in').value = v; setMode('custom');
+    var curIn = (levels().water - levels().tide) * 12;
+    if (xunit === 'ft') { var f = Math.max(0, Math.round((Math.round(curIn / 12 * 10) / 10 + d * 0.1) * 10) / 10); customIn = f * 12; }
+    else customIn = Math.max(0, Math.round(curIn) + d);
+    setMode('custom');
   }
   function useLive(kind) {
     var f = kind === 'avg' ? anomalyAvgFt : anomalyMaxFt;
     if (f == null) return;
-    $('extra-in').value = Math.max(0, Math.round(f * 12)); setMode('custom', kind);
+    customIn = Math.max(0, Math.round(f * 12)); setMode('custom', kind);
   }
   [['q-minus', -1], ['q-plus', 1]].forEach(function (c) {
     var b = $(c[0]), t1 = null, t2 = null;
@@ -1346,7 +1368,7 @@ section > .hrow { margin-bottom: 8px; }
     b.addEventListener('pointerdown', function (e) { e.preventDefault(); stepExtra(c[1]); t1 = setTimeout(function () { t2 = setInterval(function () { stepExtra(c[1]); }, 90); }, 450); });
     ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { b.addEventListener(ev, stop); });
   });
-  $('q-extra-in').addEventListener('input', function () { var v = parseFloat(this.value); if (!isNaN(v)) { $('extra-in').value = Math.max(0, v); setMode('custom'); } });
+  $('q-extra-in').addEventListener('input', function () { var v = parseFloat(this.value); if (!isNaN(v)) { customIn = Math.max(0, toIn(v)); setMode('custom'); } });
   Array.prototype.forEach.call($('q-extra-chips').children, function (b) {
     b.addEventListener('click', function () {
       var x = b.getAttribute('data-x');
@@ -1354,7 +1376,7 @@ section > .hrow { margin-bottom: 8px; }
     });
   });
   Array.prototype.forEach.call(document.querySelectorAll('[data-wi] button'), function (b) {
-    b.addEventListener('click', function () { $('whatif').value = b.getAttribute('data-w'); $('whatif').dispatchEvent(new Event('input')); });
+    b.addEventListener('click', function () { whatIn = +b.getAttribute('data-w'); updateResults(); schedule(); });
   });
   new MutationObserver(function () { $('qverdict').className = $('verdict').className; $('qverdict').innerHTML = $('verdict').innerHTML; })
     .observe($('verdict'), { childList: true, characterData: true, subtree: true, attributes: true });
@@ -1370,8 +1392,8 @@ section > .hrow { margin-bottom: 8px; }
   Array.prototype.forEach.call($('mode').children, function (b) {
     b.addEventListener('click', function () { setMode(b.getAttribute('data-mode')); });
   });
-  $('extra-in').addEventListener('input', function () { setMode('custom'); });
-  $('whatif').addEventListener('input', function () { updateResults(); schedule(); });
+  $('extra-in').addEventListener('input', function () { customIn = Math.max(0, toIn(parseFloat(this.value) || 0)); setMode('custom'); });
+  $('whatif').addEventListener('input', function () { whatIn = Math.max(0, toIn(parseFloat(this.value) || 0)); updateResults(); schedule(); });
   $('op').addEventListener('input', function () {
     var o = $('op').value / 100;
     if (slots.water.layer) slots.water.layer.setOpacity(o);
@@ -1442,12 +1464,11 @@ section > .hrow { margin-bottom: 8px; }
           $('l-max').textContent = signed(mx) + ' (' + Math.round(mx * 12) + ' in)';
           $('apply').disabled = false; $('apply-max').disabled = false;
           var ai = Math.max(0, Math.round(avg * 12)), mi = Math.max(0, Math.round(mx * 12));
-          $('apply').textContent = 'Use the live 24 h average (' + ai + ' in)';
-          $('apply-max').textContent = 'Use the live highest hour (' + mi + ' in)';
+          liveAvgIn = ai; liveMaxIn = mi;
           var la = document.querySelector('.live-avg'), lm = document.querySelector('.live-max');
           la.disabled = false; lm.disabled = false;
-          la.textContent = 'Live avg ' + ai + ' in'; lm.textContent = 'Live high ' + mi + ' in';
-          if (!extraTouched) { $('extra-in').value = mi; setMode('custom', 'max', true); }
+          syncXLabels();
+          if (!extraTouched) { customIn = mi; setMode('custom', 'max', true); }
         } else { $('l-now').textContent = 'no data'; }
       } else { $('l-now').textContent = 'unavailable'; }
       if (pr && pr.length) {
@@ -1511,7 +1532,39 @@ section > .hrow { margin-bottom: 8px; }
   }
   $('apply').addEventListener('click', function () { useLive('avg'); });
   $('apply-max').addEventListener('click', function () { useLive('max'); });
-  $('whatif').addEventListener('input', function () { if (typeof syncQuick === 'function') syncQuick(); });
+
+  /* ---- Inches / Feet switch for extra water ---- */
+  function syncXLabels() {
+    var ft = xunit === 'ft', u = ft ? 'ft' : 'in', word = ft ? 'feet' : 'inches';
+    Array.prototype.forEach.call(document.querySelectorAll('.xu button'), function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-xu') === xunit ? 'true' : 'false'); });
+    [$('extra-in'), $('whatif'), $('q-extra-in')].forEach(function (el) { el.step = ft ? '0.1' : '1'; el.setAttribute('inputmode', ft ? 'decimal' : 'numeric'); });
+    $('extra-in').setAttribute('aria-label', 'Your own extra water in ' + word);
+    $('whatif').setAttribute('aria-label', 'Worse case extra water in ' + word);
+    $('q-extra-in').setAttribute('aria-label', 'Extra water in ' + word);
+    $('extra-unit').textContent = word; $('what-unit').textContent = word; $('q-extra-unit').textContent = u;
+    $('q-minus').setAttribute('aria-label', ft ? 'One tenth of a foot less' : 'One inch less');
+    $('q-plus').setAttribute('aria-label', ft ? 'One tenth of a foot more' : 'One inch more');
+    $('m-none-sm').textContent = fmtX(0); $('m-city-sm').textContent = '+' + fmtX(22);
+    $('city-hint').textContent = ft ? 'The City reports water recently running about ' + fmtNum(22) + ' ft (22 inches) above forecast.' : 'The City reports water recently running about 22 inches above forecast.';
+    document.querySelector('#q-extra-chips [data-x="city"]').textContent = 'City ' + fmtX(22);
+    if (liveAvgIn != null) {
+      $('apply').textContent = 'Use the live 24 h average (' + fmtX(liveAvgIn) + ')';
+      $('apply-max').textContent = 'Use the live highest hour (' + fmtX(liveMaxIn) + ')';
+      document.querySelector('.live-avg').textContent = 'Live avg ' + fmtX(liveAvgIn);
+      document.querySelector('.live-max').textContent = 'Live high ' + fmtX(liveMaxIn);
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-wi] button'), function (b) {
+      var w = +b.getAttribute('data-w'); b.textContent = w ? '+' + fmtX(w) : 'None';
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.xu button'), function (b) {
+    b.addEventListener('click', function () {
+      xunit = b.getAttribute('data-xu') === 'ft' ? 'ft' : 'in';
+      try { localStorage.setItem('tfm_xunit', xunit); } catch (e) {}
+      syncXLabels(); updateResults();
+    });
+  });
+  syncXLabels();
 
   setSpot(home, null);
   updateResults();
